@@ -5,7 +5,6 @@ import pytz
 import config
 
 fb_base_url = "https://graph.facebook.com"
-#token = "EAAMttReTl3kBALipBJTYWzVpSKhOibDfogM2z5QEkKXUmMS0QcN64SoRcyMU1Sc2q7TJhLABxICLKmUKGANGCw7u4IHBIj8Q79LtQJICI6bNpDvdqCJGgn6GfidIZAoBN2A9yU2qckOPFUGxNsLiZBfgVeeeteW1mKogfKy4sjdeXMlHUBAy4dqHd5ZCFZCqZBRQBZALbnf5jyyLLqNJpk"
 fb_page_id = "111101134055001"
 #page_id = "115563666940099"
 fb_fields = "id, name, category, attending_count, description,  end_time, event_times, place,start_time, cover"
