@@ -11,7 +11,7 @@ fb_page_id = "111101134055001"
 fb_fields = "id, name, category, attending_count, description,  end_time, event_times, place,start_time, cover"
 
 wp_base_url = "http://localhost:8000/wp-json/events_api/v1"
-since_filter = None#"2020-09-20T12:00:00"
+since_filter = "2020-09-30T12:00:00"
 until_filter = None#"2020-09-23T21:00:00"
 
 wpEventsByFacebookId = {}
@@ -133,6 +133,62 @@ def createNewEvent(event):
 
     newEvent['category'] = category
 
+    if event.get('place') and event['place'].get('name'):
+        location = event['place']['name']
+        split = location.split(',')
+        if len(split) == 4:
+            newEvent['venue_name'] = split[0].strip()
+            newEvent['venue_address'] = split[1].strip()
+
+            zipAndCity = split(2).strip()
+            split2 = zipAndCity.split(' ')
+            if len(split2) == 3:
+                zipCode = split2[0] + split2[1]
+                newEvent['venue_zipcode'] = zipCode.strip()
+                newEvent['venue_city'] = split2[2].strip()
+            elif len(split2) == 2:
+                newEvent['venue_zipcode'] = split2[0].strip()
+                newEvent['venue_city'] = split2[1].strip()
+
+            newEvent['venue_country'] = split(3).strip()
+        elif len(split) == 3:
+            if split[2].strip() == 'Nederland':
+                newEvent['venue_address'] = split[0].strip()
+
+                zipAndCity = split[1].strip()
+                split2 = zipAndCity.split(' ')
+                if len(split2) == 3:
+                    zipCode = split2[0] + split2[1]
+                    newEvent['venue_zipcode'] = zipCode.strip()
+                    newEvent['venue_city'] = split2[2].strip()
+                elif len(split2) == 2:
+                    newEvent['venue_zipcode'] = split2[0].strip()
+                    newEvent['venue_city'] = split2[1].strip()
+
+                newEvent['venue_country'] = split[2].strip()
+            else:
+                newEvent['venue_name'] = split[0].strip()
+                newEvent['venue_address'] = split[1].strip()
+
+                zipAndCity = split[2].strip()
+                split2 = zipAndCity.split(' ')
+                if len(split2) == 3:
+                    zipCode = split2[0] + split2[1]
+                    newEvent['venue_zipcode'] = zipCode.strip()
+                    newEvent['venue_city'] = split2[2].strip()
+                elif len(split2) == 2:
+                    newEvent['venue_zipcode'] = split2[0].strip()
+                    newEvent['venue_city'] = split2[1].strip()
+        elif len(split) == 2:
+            newEvent['venue_address'] = split[1].strip()
+            newEvent['venue_city'] = split2[1].strip()
+        elif len(split) == 1:
+            newEvent['venue_name'] = split[0].strip()
+    elif event.get('place') and event['place'].get('location'):
+        location = event['place']['location']
+        event['venue_lat'] = location.get('latitude')
+        event['venue_lon'] = location.get('longitude')
+
     return newEvents
 
 def createNewEvents(fbEvents):
@@ -221,7 +277,7 @@ def compare(fbEvents):
             print("No match for facebook_id..." + fbEvent['id'])
             subEventThumbnailId = None
             if fbEvent.get('event_times') != None:
-                print('...trying subevents'
+                print('...trying subevents')
                 for subEvent in fbEvent['event_times']:
                     wpEvent2 = wpEventsByFacebookId.get(subEvent['id'])
                     if wpEvent2 != None:
