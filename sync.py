@@ -1,6 +1,7 @@
 import requests
 from datetime import datetime, timezone
 import pytz
+import re
 
 import config
 
@@ -107,6 +108,31 @@ def createNewEvent(event):
         newEvent['end_date'] = endTime.strftime("%Y-%m-%d %H:%M")
         newEvents.append(newEvent)
 
+    category = 'anders'
+    if event.get('name') != None:
+        name = event['name'].lower()
+        if (('action' in name and not 'actiontraining' in name and not 'action training' in name) or
+            ('actie' in name and not 'actietraining' in name and not 'actie training' in name) or
+            'luchtalarm' in name):
+            category = 'actie'
+        elif 'training' in name or 'nvda' in name:
+            category = 'training'
+        elif ('talk' in name or
+                'lezing' in name or
+                'introduction' in name or
+                'introductie' in name or
+                'heading for extinction' in name or
+                'what to do about it' in name or
+                'what can we do about it' in name or
+                'what we can do about it' in name or
+                re.search('wat (wij|we) er *aan kunnen doen', name) or
+                re.search('wat kunnen (wij|we) er *aan doen', name)):
+            category = 'lezing'
+        elif 'meeting' in name or 'bijeenkomst' in name:
+            category = 'meeting'
+
+    newEvent['category'] = category
+
     return newEvents
 
 def createNewEvents(fbEvents):
@@ -192,9 +218,10 @@ def compare(fbEvents):
             if modified:
                 putEvent(newEvent)
         else:
-            print("No match for facebook_id " + fbEvent['id'] + ', trying subevents')
+            print("No match for facebook_id..." + fbEvent['id'])
             subEventThumbnailId = None
             if fbEvent.get('event_times') != None:
+                print('...trying subevents'
                 for subEvent in fbEvent['event_times']:
                     wpEvent2 = wpEventsByFacebookId.get(subEvent['id'])
                     if wpEvent2 != None:
@@ -240,7 +267,7 @@ def compare(fbEvents):
                         else:
                             print("No updates detected")
                     else:
-                        print("No match for facebook_id " + subEvent['id'])
+                        print("No match for subevent facebook_id " + subEvent['id'])
                         print("Creating new event")
 
                         if subEventThumbnailId == None:
@@ -263,6 +290,7 @@ def compare(fbEvents):
                 #if wpEvent.content.startsWith('<input type="hidden" id="facebook_id" name="facebook_id" value="'):
                 #     pos1 = 65
             else:
+                print('No match and no subevents, creating new event')
                 convertedEvents = createNewEvent(fbEvent)
                 for convertedEvent in convertedEvents:
                     postEvent(convertedEvent)
