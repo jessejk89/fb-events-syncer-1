@@ -8,13 +8,14 @@ import config
 fb_base_url = "https://graph.facebook.com"
 fb_page_id = "111101134055001"
 #page_id = "115563666940099"
-fb_fields = "id, name, category, attending_count, description,  end_time, event_times, place,start_time, cover"
+fb_fields = "id, name, category, attending_count, description,  end_time, event_times, place,start_time, cover, owner{name, emails, phone, website}"
 
 wp_base_url = "http://localhost:8000/wp-json/events_api/v1"
 since_filter = "2020-09-30T12:00:00"
 until_filter = None#"2020-09-23T21:00:00"
 
 wpEventsByFacebookId = {}
+ownersById = {}
 
 def getEventsFromFacebook():
     url = fb_base_url + '/' + fb_page_id + '/events?fields=' + fb_fields + '&access_token=' + config.fb_token
@@ -91,7 +92,7 @@ def createNewEvent(event):
     if event.get('cover') != None:
         newEvent['picture_url'] = event['cover']['source']
 
-    if event.get('event_times') != None:
+    if event.get('event_times') != None: # we are dealing with a recurring event with multiple start- and endtimes and it's own facebook id
         for subEvent in event['event_times']:
             startTime = datetime.strptime(subEvent['start_time'], "%Y-%m-%dT%H:%M:%S%z")
             endTime = datetime.strptime(subEvent['end_time'], "%Y-%m-%dT%H:%M:%S%z")
@@ -101,14 +102,15 @@ def createNewEvent(event):
             newSubEvent['start_date'] = startTime.strftime("%Y-%m-%d %H:%M")
             newSubEvent['end_date'] = endTime.strftime("%Y-%m-%d %H:%M")
             newEvents.append(newSubEvent)
-    else:
+    else: # this is single event with only one start- and endtime
         startTime = datetime.strptime(event['start_time'], "%Y-%m-%dT%H:%M:%S%z")
         endTime = datetime.strptime(event['end_time'], "%Y-%m-%dT%H:%M:%S%z")
         newEvent['start_date'] = startTime.strftime("%Y-%m-%d %H:%M")
         newEvent['end_date'] = endTime.strftime("%Y-%m-%d %H:%M")
         newEvents.append(newEvent)
 
-    category = 'anders'
+    # make an educated guess about the category: review is needed by a human
+    category = 'meeting'
     if event.get('name') != None:
         name = event['name'].lower()
         if (('action' in name and not 'actiontraining' in name and not 'action training' in name) or
@@ -133,44 +135,38 @@ def createNewEvent(event):
 
     newEvent['category'] = category
 
+    # location
     if event.get('place') and event['place'].get('name'):
-        location = event['place']['name']
-        split = location.split(',')
-        if len(split) == 4:
-            newEvent['venue_name'] = split[0].strip()
-            newEvent['venue_address'] = split[1].strip()
+        place_name = event['place']['name']
+        location = event['place'].get('location')
 
-            zipAndCity = split(2).strip()
-            split2 = zipAndCity.split(' ')
-            if len(split2) == 3:
-                zipCode = split2[0] + split2[1]
-                newEvent['venue_zipcode'] = zipCode.strip()
-                newEvent['venue_city'] = split2[2].strip()
-            elif len(split2) == 2:
-                newEvent['venue_zipcode'] = split2[0].strip()
-                newEvent['venue_city'] = split2[1].strip()
+        if location != None: # There is a location instance
+            city = location.get('city')
+            if city != None:
+                newEvent['venue_city'] = city
+            country = location.get('country')
+            if country != None:
+                newEvent['venue_country'] = country
+            latitude = location.get('latitude')
+            longitude = location.get('longitude')
+            if latitude != None and longitude != None:
+                newEvent['venue_lat'] = latitude
+                newEvent['venue_lon'] = longitude
+            street = location.get('street')
+            if street != None:
+                newEvent['venue_address'] = street
+            zip = location.get('zip')
+            if zip != None:
+                newEvent['venue_zipcode'] = zip
 
-            newEvent['venue_country'] = split(3).strip()
-        elif len(split) == 3:
-            if split[2].strip() == 'Nederland':
-                newEvent['venue_address'] = split[0].strip()
-
-                zipAndCity = split[1].strip()
-                split2 = zipAndCity.split(' ')
-                if len(split2) == 3:
-                    zipCode = split2[0] + split2[1]
-                    newEvent['venue_zipcode'] = zipCode.strip()
-                    newEvent['venue_city'] = split2[2].strip()
-                elif len(split2) == 2:
-                    newEvent['venue_zipcode'] = split2[0].strip()
-                    newEvent['venue_city'] = split2[1].strip()
-
-                newEvent['venue_country'] = split[2].strip()
-            else:
+            newEvent['venue_name'] = place_name
+        else: # All information needs to be parsed from the name field
+            split = place_name.split(',')
+            if len(split) == 4:
                 newEvent['venue_name'] = split[0].strip()
                 newEvent['venue_address'] = split[1].strip()
 
-                zipAndCity = split[2].strip()
+                zipAndCity = split(2).strip()
                 split2 = zipAndCity.split(' ')
                 if len(split2) == 3:
                     zipCode = split2[0] + split2[1]
@@ -179,15 +175,58 @@ def createNewEvent(event):
                 elif len(split2) == 2:
                     newEvent['venue_zipcode'] = split2[0].strip()
                     newEvent['venue_city'] = split2[1].strip()
-        elif len(split) == 2:
-            newEvent['venue_address'] = split[1].strip()
-            newEvent['venue_city'] = split2[1].strip()
-        elif len(split) == 1:
-            newEvent['venue_name'] = split[0].strip()
-    elif event.get('place') and event['place'].get('location'):
-        location = event['place']['location']
-        event['venue_lat'] = location.get('latitude')
-        event['venue_lon'] = location.get('longitude')
+
+                newEvent['venue_country'] = split(3).strip()
+            elif len(split) == 3:
+                if split[2].strip() == 'Nederland':
+                    newEvent['venue_address'] = split[0].strip()
+
+                    zipAndCity = split[1].strip()
+                    split2 = zipAndCity.split(' ')
+                    if len(split2) == 3:
+                        zipCode = split2[0] + split2[1]
+                        newEvent['venue_zipcode'] = zipCode.strip()
+                        newEvent['venue_city'] = split2[2].strip()
+                    elif len(split2) == 2:
+                        newEvent['venue_zipcode'] = split2[0].strip()
+                        newEvent['venue_city'] = split2[1].strip()
+
+                    newEvent['venue_country'] = split[2].strip()
+                else:
+                    newEvent['venue_name'] = split[0].strip()
+                    newEvent['venue_address'] = split[1].strip()
+
+                    zipAndCity = split[2].strip()
+                    split2 = zipAndCity.split(' ')
+                    if len(split2) == 3:
+                        zipCode = split2[0] + split2[1]
+                        newEvent['venue_zipcode'] = zipCode.strip()
+                        newEvent['venue_city'] = split2[2].strip()
+                    elif len(split2) == 2:
+                        newEvent['venue_zipcode'] = split2[0].strip()
+                        newEvent['venue_city'] = split2[1].strip()
+            elif len(split) == 2:
+                newEvent['venue_address'] = split[1].strip()
+                newEvent['venue_city'] = split2[1].strip()
+            elif len(split) == 1:
+                newEvent['venue_name'] = split[0].strip()
+
+    # owner field contains information about the organizer
+    owner = event.get('owner')
+    if owner != None:
+        name = owner.get('name')
+        if name != None:
+            newEvent['organizer_name'] = name
+        emails = owner.get('emails')
+        if emails != None and len(emails) > 0:
+            newEvent['organizer_email'] = emails[0]
+        phone = owner.get('phone')
+        if phone != None:
+            newEvent['organizer_phone'] = phone
+        website = owner.get('website')
+        if website != None:
+            newEvent['organizer_url'] = website
+
 
     return newEvents
 
