@@ -1,9 +1,9 @@
 import requests
 from datetime import datetime, timezone
 import pytz
-import re
 
 import config
+import converter
 
 fb_base_url = "https://graph.facebook.com"
 fb_page_id = "111101134055001"
@@ -79,6 +79,10 @@ def createNewSubEvent(event, parentEvent):
     newEvent['start_date'] = startTime.strftime("%Y-%m-%d %H:%M")
     newEvent['end_date'] = endTime.strftime("%Y-%m-%d %H:%M")
 
+    converter.parseCategoryInformation(parentEvent, newEvent)
+    converter.parseLocationInformation(parentEvent, newEvent)
+    converter.parseOwnerInformation(parentEvent, newEvent)
+
     return newEvent
 
 def createNewEvent(event):
@@ -109,124 +113,9 @@ def createNewEvent(event):
         newEvent['end_date'] = endTime.strftime("%Y-%m-%d %H:%M")
         newEvents.append(newEvent)
 
-    # make an educated guess about the category: review is needed by a human
-    category = 'meeting'
-    if event.get('name') != None:
-        name = event['name'].lower()
-        if (('action' in name and not 'actiontraining' in name and not 'action training' in name) or
-            ('actie' in name and not 'actietraining' in name and not 'actie training' in name) or
-            'luchtalarm' in name):
-            category = 'actie'
-        elif 'training' in name or 'nvda' in name:
-            category = 'training'
-        elif ('talk' in name or
-                'lezing' in name or
-                'introduction' in name or
-                'introductie' in name or
-                'heading for extinction' in name or
-                'what to do about it' in name or
-                'what can we do about it' in name or
-                'what we can do about it' in name or
-                re.search('wat (wij|we) er *aan kunnen doen', name) or
-                re.search('wat kunnen (wij|we) er *aan doen', name)):
-            category = 'lezing'
-        elif 'meeting' in name or 'bijeenkomst' in name:
-            category = 'meeting'
-
-    newEvent['category'] = category
-
-    # location
-    if event.get('place') and event['place'].get('name'):
-        place_name = event['place']['name']
-        location = event['place'].get('location')
-
-        if location != None: # There is a location instance
-            city = location.get('city')
-            if city != None:
-                newEvent['venue_city'] = city
-            country = location.get('country')
-            if country != None:
-                newEvent['venue_country'] = country
-            latitude = location.get('latitude')
-            longitude = location.get('longitude')
-            if latitude != None and longitude != None:
-                newEvent['venue_lat'] = latitude
-                newEvent['venue_lon'] = longitude
-            street = location.get('street')
-            if street != None:
-                newEvent['venue_address'] = street
-            zip = location.get('zip')
-            if zip != None:
-                newEvent['venue_zipcode'] = zip
-
-            newEvent['venue_name'] = place_name
-        else: # All information needs to be parsed from the name field
-            split = place_name.split(',')
-            if len(split) == 4:
-                newEvent['venue_name'] = split[0].strip()
-                newEvent['venue_address'] = split[1].strip()
-
-                zipAndCity = split(2).strip()
-                split2 = zipAndCity.split(' ')
-                if len(split2) == 3:
-                    zipCode = split2[0] + split2[1]
-                    newEvent['venue_zipcode'] = zipCode.strip()
-                    newEvent['venue_city'] = split2[2].strip()
-                elif len(split2) == 2:
-                    newEvent['venue_zipcode'] = split2[0].strip()
-                    newEvent['venue_city'] = split2[1].strip()
-
-                newEvent['venue_country'] = split(3).strip()
-            elif len(split) == 3:
-                if split[2].strip() == 'Nederland':
-                    newEvent['venue_address'] = split[0].strip()
-
-                    zipAndCity = split[1].strip()
-                    split2 = zipAndCity.split(' ')
-                    if len(split2) == 3:
-                        zipCode = split2[0] + split2[1]
-                        newEvent['venue_zipcode'] = zipCode.strip()
-                        newEvent['venue_city'] = split2[2].strip()
-                    elif len(split2) == 2:
-                        newEvent['venue_zipcode'] = split2[0].strip()
-                        newEvent['venue_city'] = split2[1].strip()
-
-                    newEvent['venue_country'] = split[2].strip()
-                else:
-                    newEvent['venue_name'] = split[0].strip()
-                    newEvent['venue_address'] = split[1].strip()
-
-                    zipAndCity = split[2].strip()
-                    split2 = zipAndCity.split(' ')
-                    if len(split2) == 3:
-                        zipCode = split2[0] + split2[1]
-                        newEvent['venue_zipcode'] = zipCode.strip()
-                        newEvent['venue_city'] = split2[2].strip()
-                    elif len(split2) == 2:
-                        newEvent['venue_zipcode'] = split2[0].strip()
-                        newEvent['venue_city'] = split2[1].strip()
-            elif len(split) == 2:
-                newEvent['venue_address'] = split[1].strip()
-                newEvent['venue_city'] = split2[1].strip()
-            elif len(split) == 1:
-                newEvent['venue_name'] = split[0].strip()
-
-    # owner field contains information about the organizer
-    owner = event.get('owner')
-    if owner != None:
-        name = owner.get('name')
-        if name != None:
-            newEvent['organizer_name'] = name
-        emails = owner.get('emails')
-        if emails != None and len(emails) > 0:
-            newEvent['organizer_email'] = emails[0]
-        phone = owner.get('phone')
-        if phone != None:
-            newEvent['organizer_phone'] = phone
-        website = owner.get('website')
-        if website != None:
-            newEvent['organizer_url'] = website
-
+    converter.parseCategoryInformation(event, newEvent)
+    converter.parseLocationInformation(event, newEvent)
+    converter.parseOwnerInformation(event, newEvent)
 
     return newEvents
 
@@ -278,17 +167,17 @@ def compare(fbEvents):
             if wpEvent['title'] != fbEvent['name']:
                 newEvent['title'] = fbEvent['name']
                 modified = True
-                print('UPDATED: ""'+ wpEvent['title'] + ' - ' + fbEvent['name'] + '"')
+                print('UPDATED: "'+ wpEvent['title'] + ' - ' + fbEvent['name'] + '"')
             if wpEvent['content'] != fbEvent['description']:
                 newEvent['content'] = fbEvent['description']
                 modified = True
-                print('UPDATED: ""' + wpEvent['content'] + ' - ' + fbEvent['description'] + '"')
+                print('UPDATED: "' + wpEvent['content'] + ' - ' + fbEvent['description'] + '"')
 
             if wpEvent.get('meta') != None:
                 if wpEvent['meta']['event_start_date'] != startTime.strftime('%Y-%m-%d') or wpEvent['meta']['event_start_hour'] != startTime.strftime('%I') or wpEvent['meta']['event_start_minute'] != startTime.strftime('%M') or wpEvent['meta']['event_start_meridian'] != startTime.strftime('%p').lower() or wpEvent['meta']['start_ts'] != str(int(start_timestamp)):
                     newEvent['start_date'] = startTime.strftime("%Y-%m-%d %H:%M")
                     modified = True
-                    print('UPDATED: ""' + wpEvent['meta']['event_start_date'] + ' - ' + str(startTime) + '"')
+                    print('UPDATED: "' + wpEvent['meta']['event_start_date'] + ' - ' + str(startTime) + '"')
                     print(startTime.strftime('%Y-%m-%d'))
                     print(startTime.strftime('%I'))
                     print(startTime.strftime('%M'))
@@ -297,7 +186,7 @@ def compare(fbEvents):
                 if wpEvent['meta']['event_end_date'] != endTime.strftime('%Y-%m-%d') or wpEvent['meta']['event_end_hour'] != endTime.strftime('%I') or wpEvent['meta']['event_end_minute'] != endTime.strftime('%M')or wpEvent['meta']['event_end_meridian'] != endTime.strftime('%p').lower() or wpEvent['meta']['end_ts'] != str(int(end_timestamp)):
                     newEvent['end_date'] = endTime.strftime("%Y-%m-%d %H:%M")
                     modified = True
-                    print('UPDATED: ""' + wpEvent['meta']['event_end_date'] + ' - ' + str(endTime) + '"')
+                    print('UPDATED: "' + wpEvent['meta']['event_end_date'] + ' - ' + str(endTime) + '"')
                     print(endTime.strftime('%Y-%m-%d'))
                     print(endTime.strftime('%I'))
                     print(endTime.strftime('%M'))
@@ -333,21 +222,21 @@ def compare(fbEvents):
                         if wpEvent2['title'] != fbEvent['name']:
                             newEvent['title'] = fbEvent['name']
                             modified2 = True
-                            print('UPDATED: ""'+ wpEvent2['title'] + ' - ' + fbEvent['name'] + '"')
+                            print('UPDATED: "'+ wpEvent2['title'] + ' - ' + fbEvent['name'] + '"')
                         if wpEvent2['content'] != fbEvent['description']:
                             newEvent['content'] = fbEvent['description']
                             modified2 = True
-                            print('UPDATED: ""' + wpEvent2['content'] + ' - ' + fbEvent['description'] + '"')
+                            print('UPDATED: "' + wpEvent2['content'] + ' - ' + fbEvent['description'] + '"')
                         if wpEvent2.get('meta') != None:
                             if wpEvent2['meta']['event_start_date'] != startTime.strftime('%Y-%m-%d') or wpEvent2['meta']['event_start_hour'] != startTime.strftime('%I') or wpEvent2['meta']['event_start_minute'] != startTime.strftime('%M')or wpEvent2['meta']['event_start_meridian'] != startTime.strftime('%p').lower() or wpEvent2['meta']['start_ts'] != str(int(start_timestamp)):
                                 newEvent['start_date'] = startTime.strftime("%Y-%m-%d %H:%M")
                                 modifie2d = True
-                                print('UPDATED: ""' + wpEvent2['meta']['event_start_date'] + ' - ' + str(startTime) + '"')
+                                print('UPDATED: "' + wpEvent2['meta']['event_start_date'] + ' - ' + str(startTime) + '"')
                                 print(str(int(start_timestamp)))
                             if wpEvent2['meta']['event_end_date'] != endTime.strftime('%Y-%m-%d') or wpEvent2['meta']['event_end_hour'] != endTime.strftime('%I') or wpEvent2['meta']['event_end_minute'] != endTime.strftime('%M')or wpEvent2['meta']['event_end_meridian'] != endTime.strftime('%p').lower() or wpEvent2['meta']['end_ts'] != str(int(end_timestamp)):
                                 newEvent['end_date'] = endTime.strftime("%Y-%m-%d %H:%M")
                                 modified2 = True
-                                print('UPDATED: ""' + wpEvent2['meta']['event_end_date'] + ' - ' + str(endTime) + '"')
+                                print('UPDATED: "' + wpEvent2['meta']['event_end_date'] + ' - ' + str(endTime) + '"')
                                 print(str(int(start_timestamp)))
                             if wpEvent2['meta'].get('_thumbnail_id') == None:
                                 # for now add picture when there is none. We may need a way to detect if a picture has been changed
