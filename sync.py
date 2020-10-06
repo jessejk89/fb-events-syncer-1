@@ -16,6 +16,7 @@ since_filter = "2020-09-30T12:00:00"
 until_filter = None#"2020-09-23T21:00:00"
 
 wpEventsByFacebookId = {}
+fbEventsByFacebookId = {}
 
 def getEventsFromFacebook():
     url = fb_base_url + '/' + fb_page_id + '/events?fields=' + fb_fields + '&access_token=' + config.fb_token
@@ -277,6 +278,19 @@ def compare(fbEvents):
                 for convertedEvent in convertedEvents:
                     postEvent(convertedEvent)
 
+def detectCancelledEvents(wpEvents):
+    for wpEvent in wpEvents:
+        meta = wpEvent.get('meta')
+        if meta != None and meta.get('facebook_id'):
+            fbEvent = fbEventsByFacebookId.get(meta['facebook_id'])
+            if fbEvent == None:
+                print('No facebook event for wordpress event with facebook_id ' + meta['facebook_id'])
+                print('deleting event...')
+                wpEvent['post_status'] = 'trash'
+                newEvent = {'id': wpEvent['id'], 'post_status': 'trash'}
+                print("CANCELLED EVENT FOUND " + wpEvent['title'])
+                putEvent(newEvent)
+
 def writeEventsToFile(events, filename):
     file  = open(filename, 'w', encoding='utf-8')
     file.write(events)
@@ -353,6 +367,11 @@ def execute4():
         print('Event found; id: ' + item['id'] + '; name: ' + item['name'] + '; time: ' + item['start_time'])
         if item.get('place') != None and item['place'].get('name') != None:
             print('--place: ' + item['place']['name'] )
+        fbEventsByFacebookId[item['id']] = item
+        if item.get('event_times') != None:
+            for subItem in item['event_times']:
+                print('\tSubevent found, id: ' + subItem['id'])
+                fbEventsByFacebookId[subItem['id']] = subItem
 
      # newEvents = reversed(createNewEvents(dict2))
 
@@ -360,6 +379,7 @@ def execute4():
     # print(str(len(dict2)) + ' events counted')
 
     compare(dict2)
+    detectCancelledEvents(dict1)
 
     print('Importing facebook events done')
 
