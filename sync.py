@@ -1,6 +1,7 @@
 import requests
 from datetime import datetime, timezone
 import pytz
+from hashlib import blake2b
 
 import config
 import converter
@@ -15,7 +16,6 @@ since_filter = "2020-09-30T12:00:00"
 until_filter = None#"2020-09-23T21:00:00"
 
 wpEventsByFacebookId = {}
-ownersById = {}
 
 def getEventsFromFacebook():
     url = fb_base_url + '/' + fb_page_id + '/events?fields=' + fb_fields + '&access_token=' + config.fb_token
@@ -82,6 +82,7 @@ def createNewSubEvent(event, parentEvent):
     converter.parseCategoryInformation(parentEvent, newEvent)
     converter.parseLocationInformation(parentEvent, newEvent)
     converter.parseOwnerInformation(parentEvent, newEvent)
+    converter.createFacebookHashValuesRecurringEvent(event, parentEvent, newEvent)
 
     return newEvent
 
@@ -116,6 +117,7 @@ def createNewEvent(event):
     converter.parseCategoryInformation(event, newEvent)
     converter.parseLocationInformation(event, newEvent)
     converter.parseOwnerInformation(event, newEvent)
+    converter.createFacebookHashValues(event, newEvent)
 
     return newEvents
 
@@ -151,6 +153,75 @@ def putEvent(event):
     print('Text: ' + response.text)
     return response.text
 
+def bhash(content):
+    return blake2b(bytes(content, 'utf-8')).hexdigest()
+
+def eventIsUpdated(wpEvent, fbEvent, newEvent, subEvent):
+    modified = False
+
+    meta = wpEvent.get('meta')
+    if meta != None:
+        if meta.get('name_hash') != bhash(fbEvent['name']):
+            newEvent['title'] = fbEvent['name']
+            newEvent['name_hash'] = bhash(fbEvent.get('name'))
+            modified = True
+            #print('UPDATED: "'+ wpEvent['title'] + ' - ' + fbEvent['name'] + '"')
+            print('UPDATED: "'+ str(meta.get('name_hash')) + '" - "' + str(bhash(fbEvent['name'])) + '"')
+        if meta.get('description_hash') != bhash(fbEvent['description']):
+            newEvent['content'] = fbEvent['description']
+            newEvent['description_hash'] = bhash(fbEvent.get('description'))
+            modified = True
+            print('UPDATED: "' + wpEvent['content'] + ' - ' + fbEvent['description'] + '"')
+        if subEvent != None:
+            if meta.get('start_time_hash') != bhash(subEvent['start_time']):
+                startTime = datetime.strptime(subEvent['start_time'], "%Y-%m-%dT%H:%M:%S%z")
+                newEvent['start_date'] = startTime.strftime("%Y-%m-%d %H:%M")
+                newEvent['start_time_hash'] = bhash(subEvent.get('start_time'))
+                modified = True
+                print('UPDATED: "' + wpEvent['meta']['event_start_date'] + ' - ' + str(startTime) + '"')
+            if meta.get('end_time_hash') != bhash(subEvent['end_time']):
+                endTime = datetime.strptime(subEvent['end_time'], "%Y-%m-%dT%H:%M:%S%z")
+                newEvent['end_date'] = endTime.strftime("%Y-%m-%d %H:%M")
+                newEvent['end_time_hash'] = bhash(subEvent.get('end_time'))
+                modified = True
+                print('UPDATED: "' + wpEvent['meta']['event_end_date'] + ' - ' + str(endTime) + '"')
+        else:
+            if meta.get('start_time_hash') != bhash(fbEvent['start_time']):
+                startTime = datetime.strptime(fbEvent['start_time'], "%Y-%m-%dT%H:%M:%S%z")
+                newEvent['start_date'] = startTime.strftime("%Y-%m-%d %H:%M")
+                newEvent['start_time_hash'] = bhash(fbEvent.get('start_time'))
+                modified = True
+                print('UPDATED: "' + wpEvent['meta']['event_start_date'] + ' - ' + str(startTime) + '"')
+            if meta.get('end_time_hash') != bhash(fbEvent['end_time']):
+                endTime = datetime.strptime(fbEvent['end_time'], "%Y-%m-%dT%H:%M:%S%z")
+                newEvent['end_date'] = endTime.strftime("%Y-%m-%d %H:%M")
+                newEvent['end_time_hash'] = bhash(fbEvent.get('end_time'))
+                modified = True
+                print('UPDATED: "' + wpEvent['meta']['event_end_date'] + ' - ' + str(endTime) + '"')
+        if meta.get('place_hash') != bhash(str(fbEvent.get('place'))):
+            # for now add picture when there is none. We may need a way to detect if a picture has been changed
+            if fbEvent.get('place') != None:
+                converter.parseLocationInformation(fbEvent, newEvent)
+                newEvent['place_hash'] = bhash(str(fbEvent.get('place')))
+                modified = True
+                print('UPDATED PLACE')
+        if meta.get('owner_hash') != bhash(str(fbEvent.get('owner'))):
+            # for now add picture when there is none. We may need a way to detect if a picture has been changed
+            if fbEvent.get('owner') != None:
+                converter.parseOwnerInformation(fbEvent, newEvent)
+                newEvent['owner_hash'] = bhash(str(fbEvent.get('owner')))
+                modified = True
+                print('UPDATED OWNER')
+        if meta.get('cover_hash') != bhash(str(fbEvent.get('cover'))):
+            # for now add picture when there is none. We may need a way to detect if a picture has been changed
+            if fbEvent.get('cover') != None:
+                newEvent['picture_url'] = fbEvent['cover']['source']
+                newEvent['cover_hash'] = bhash(str(fbEvent.get('cover')))
+                modified = True
+                print('UPDATED COVER')
+
+        return modified
+
 def compare(fbEvents):
     for fbEvent in fbEvents:
         wpEvent = wpEventsByFacebookId.get(fbEvent['id'])
@@ -158,49 +229,12 @@ def compare(fbEvents):
             print("Match found for facebook_id " + fbEvent['id'])
             # compare and update if necessary
             newEvent = {'id': wpEvent['id']}
-            modified = False
-            # Unfortunately I have to strip the timezone part because the Meetup events in Wordpress use UTC times as if they were local times.
-            startTime = datetime.strptime(fbEvent['start_time'], "%Y-%m-%dT%H:%M:%S%z")
-            start_timestamp = (startTime + startTime.utcoffset()).timestamp()
-            endTime = datetime.strptime(fbEvent['end_time'], "%Y-%m-%dT%H:%M:%S%z")
-            end_timestamp = (endTime + endTime.utcoffset()).timestamp()
-            if wpEvent['title'] != fbEvent['name']:
-                newEvent['title'] = fbEvent['name']
-                modified = True
-                print('UPDATED: "'+ wpEvent['title'] + ' - ' + fbEvent['name'] + '"')
-            if wpEvent['content'] != fbEvent['description']:
-                newEvent['content'] = fbEvent['description']
-                modified = True
-                print('UPDATED: "' + wpEvent['content'] + ' - ' + fbEvent['description'] + '"')
-
-            if wpEvent.get('meta') != None:
-                if wpEvent['meta']['event_start_date'] != startTime.strftime('%Y-%m-%d') or wpEvent['meta']['event_start_hour'] != startTime.strftime('%I') or wpEvent['meta']['event_start_minute'] != startTime.strftime('%M') or wpEvent['meta']['event_start_meridian'] != startTime.strftime('%p').lower() or wpEvent['meta']['start_ts'] != str(int(start_timestamp)):
-                    newEvent['start_date'] = startTime.strftime("%Y-%m-%d %H:%M")
-                    modified = True
-                    print('UPDATED: "' + wpEvent['meta']['event_start_date'] + ' - ' + str(startTime) + '"')
-                    print(startTime.strftime('%Y-%m-%d'))
-                    print(startTime.strftime('%I'))
-                    print(startTime.strftime('%M'))
-                    print(startTime.strftime('%p').lower())
-                    print(str(int(start_timestamp)))
-                if wpEvent['meta']['event_end_date'] != endTime.strftime('%Y-%m-%d') or wpEvent['meta']['event_end_hour'] != endTime.strftime('%I') or wpEvent['meta']['event_end_minute'] != endTime.strftime('%M')or wpEvent['meta']['event_end_meridian'] != endTime.strftime('%p').lower() or wpEvent['meta']['end_ts'] != str(int(end_timestamp)):
-                    newEvent['end_date'] = endTime.strftime("%Y-%m-%d %H:%M")
-                    modified = True
-                    print('UPDATED: "' + wpEvent['meta']['event_end_date'] + ' - ' + str(endTime) + '"')
-                    print(endTime.strftime('%Y-%m-%d'))
-                    print(endTime.strftime('%I'))
-                    print(endTime.strftime('%M'))
-                    print(endTime.strftime('%p').lower())
-                    print(str(int(end_timestamp)))
-                if wpEvent['meta'].get('_thumbnail_id') == None:
-                    # for now add picture when there is none. We may need a way to detect if a picture has been changed
-                    if fbEvent.get('cover') != None:
-                        newEvent['picture_url'] = fbEvent['cover']['source']
-                        modified2 = True
 
             #TODO: compare all fields and check if event is now a recurring event
-            if modified:
+            if eventIsUpdated(wpEvent, fbEvent, newEvent, None):
                 putEvent(newEvent)
+            else:
+                print("No updates detected for main event")
         else:
             print("No match for facebook_id..." + fbEvent['id'])
             subEventThumbnailId = None
@@ -215,41 +249,11 @@ def compare(fbEvents):
                         newEvent = {'id': wpEvent2['id']}
                         modified2 = False
 
-                        startTime = datetime.strptime(subEvent['start_time'], "%Y-%m-%dT%H:%M:%S%z")
-                        start_timestamp = (startTime + startTime.utcoffset()).timestamp()
-                        endTime = datetime.strptime(subEvent['end_time'], "%Y-%m-%dT%H:%M:%S%z")
-                        end_timestamp = (endTime + endTime.utcoffset()).timestamp()
-                        if wpEvent2['title'] != fbEvent['name']:
-                            newEvent['title'] = fbEvent['name']
-                            modified2 = True
-                            print('UPDATED: "'+ wpEvent2['title'] + ' - ' + fbEvent['name'] + '"')
-                        if wpEvent2['content'] != fbEvent['description']:
-                            newEvent['content'] = fbEvent['description']
-                            modified2 = True
-                            print('UPDATED: "' + wpEvent2['content'] + ' - ' + fbEvent['description'] + '"')
-                        if wpEvent2.get('meta') != None:
-                            if wpEvent2['meta']['event_start_date'] != startTime.strftime('%Y-%m-%d') or wpEvent2['meta']['event_start_hour'] != startTime.strftime('%I') or wpEvent2['meta']['event_start_minute'] != startTime.strftime('%M')or wpEvent2['meta']['event_start_meridian'] != startTime.strftime('%p').lower() or wpEvent2['meta']['start_ts'] != str(int(start_timestamp)):
-                                newEvent['start_date'] = startTime.strftime("%Y-%m-%d %H:%M")
-                                modifie2d = True
-                                print('UPDATED: "' + wpEvent2['meta']['event_start_date'] + ' - ' + str(startTime) + '"')
-                                print(str(int(start_timestamp)))
-                            if wpEvent2['meta']['event_end_date'] != endTime.strftime('%Y-%m-%d') or wpEvent2['meta']['event_end_hour'] != endTime.strftime('%I') or wpEvent2['meta']['event_end_minute'] != endTime.strftime('%M')or wpEvent2['meta']['event_end_meridian'] != endTime.strftime('%p').lower() or wpEvent2['meta']['end_ts'] != str(int(end_timestamp)):
-                                newEvent['end_date'] = endTime.strftime("%Y-%m-%d %H:%M")
-                                modified2 = True
-                                print('UPDATED: "' + wpEvent2['meta']['event_end_date'] + ' - ' + str(endTime) + '"')
-                                print(str(int(start_timestamp)))
-                            if wpEvent2['meta'].get('_thumbnail_id') == None:
-                                # for now add picture when there is none. We may need a way to detect if a picture has been changed
-                                if fbEvent.get('cover') != None:
-                                    newEvent['picture_url'] = fbEvent['cover']['source']
-                                    modified2 = True
-
-
                         #TODO: compare all fields and check if event is now a recurring event
-                        if modified2:
+                        if eventIsUpdated(wpEvent2, fbEvent, newEvent, subEvent):
                             putEvent(newEvent)
                         else:
-                            print("No updates detected")
+                            print("No updates detected for recurring subevent")
                     else:
                         print("No match for subevent facebook_id " + subEvent['id'])
                         print("Creating new event")
@@ -267,18 +271,11 @@ def compare(fbEvents):
                             convertedEvent['thumbnail_id'] = subEventThumbnailId
                             print(str(convertedEvent))
                             postEvent(convertedEvent)
-
-                        # TODO: a date is added to a set of recurring events. We could add it, but then, what would we do when such a date is removed?
-
-                # find a way to match events with eachother
-                #if wpEvent.content.startsWith('<input type="hidden" id="facebook_id" name="facebook_id" value="'):
-                #     pos1 = 65
             else:
                 print('No match and no subevents, creating new event')
                 convertedEvents = createNewEvent(fbEvent)
                 for convertedEvent in convertedEvents:
                     postEvent(convertedEvent)
-
 
 def writeEventsToFile(events, filename):
     file  = open(filename, 'w', encoding='utf-8')
@@ -353,7 +350,9 @@ def execute4():
 
     dict2 = events.json()['data']
     for item in dict2:
-        print('Event found; id: ' + item['id'] + '; name: ' + item['name'] + '; place: ' + item['place']['name'] + '; time: ' + item['start_time'])
+        print('Event found; id: ' + item['id'] + '; name: ' + item['name'] + '; time: ' + item['start_time'])
+        if item.get('place') != None and item['place'].get('name') != None:
+            print('--place: ' + item['place']['name'] )
 
      # newEvents = reversed(createNewEvents(dict2))
 

@@ -1,4 +1,8 @@
 import re
+from hashlib import blake2b
+
+def bhash(content):
+    return blake2b(bytes(content, 'utf-8')).hexdigest()
 
 def parseCategoryInformation(event, newEvent):
     # make an educated guess about the category: review is needed by a human
@@ -122,3 +126,24 @@ def parseOwnerInformation(event, newEvent):
         website = owner.get('website')
         if website != None:
             newEvent['organizer_url'] = website
+
+# Hashes can be used to compare events and find out whether they have changed or not.
+# It is important to only compare the original facebook events because wordpress events can be changed manually.
+def createFacebookHashValuesRecurringEvent(fbEvent, parentFbEvent, newEvent):
+    newEvent['name_hash'] = bhash(parentFbEvent.get('name'))
+    newEvent['description_hash'] = bhash(parentFbEvent.get('description'))
+    newEvent['start_time_hash'] = bhash(fbEvent.get('start_time'))
+    newEvent['end_time_hash'] = bhash(fbEvent.get('end_time'))
+    newEvent['place_hash'] = bhash(str(parentFbEvent.get('place')))
+    newEvent['owner_hash'] = bhash(str(parentFbEvent.get('owner')))
+    newEvent['cover_hash'] = bhash(str(parentFbEvent.get('cover')))
+
+
+def createFacebookHashValues(fbEvent, newEvent):
+    newEvent['name_hash'] = bhash(fbEvent.get('name'))
+    newEvent['description_hash'] = bhash(fbEvent.get('description'))
+    newEvent['start_time_hash'] = bhash(fbEvent.get('start_time'))
+    newEvent['end_time_hash'] = bhash(fbEvent.get('end_time'))
+    newEvent['place_hash'] = bhash(str(fbEvent.get('place')))
+    newEvent['owner_hash'] = bhash(str(fbEvent.get('owner')))
+    newEvent['cover_hash'] = bhash(str(fbEvent.get('cover')))
