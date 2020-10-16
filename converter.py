@@ -2,6 +2,8 @@ import re
 from hashlib import blake2b
 
 def bhash(content):
+    if content == None:
+        return None
     return blake2b(bytes(content, 'utf-8')).hexdigest()
 
 def parseCategoryInformation(event, newEvent):
@@ -63,7 +65,7 @@ def parseLocationInformation(event, newEvent):
                 newEvent['venue_name'] = split[0].strip()
                 newEvent['venue_address'] = split[1].strip()
 
-                zipAndCity = split(2).strip()
+                zipAndCity = split[2].strip()
                 split2 = zipAndCity.split(' ')
                 if len(split2) == 3:
                     zipCode = split2[0] + split2[1]
@@ -73,7 +75,7 @@ def parseLocationInformation(event, newEvent):
                     newEvent['venue_zipcode'] = split2[0].strip()
                     newEvent['venue_city'] = split2[1].strip()
 
-                newEvent['venue_country'] = split(3).strip()
+                newEvent['venue_country'] = split[3].strip()
             elif len(split) == 3:
                 if split[2].strip() == 'Nederland':
                     newEvent['venue_address'] = split[0].strip()
@@ -103,8 +105,19 @@ def parseLocationInformation(event, newEvent):
                         newEvent['venue_zipcode'] = split2[0].strip()
                         newEvent['venue_city'] = split2[1].strip()
             elif len(split) == 2:
-                newEvent['venue_address'] = split[1].strip()
-                newEvent['venue_city'] = split2[1].strip()
+                newEvent['venue_address'] = split[0].strip()
+
+                zipAndCity = split[1].strip()
+                split2 = zipAndCity.split(' ')
+                if len(split2) == 3:
+                    zipCode = split2[0] + split2[1]
+                    newEvent['venue_zipcode'] = zipCode.strip()
+                    newEvent['venue_city'] = split2[2].strip()
+                elif len(split2) == 2:
+                    newEvent['venue_zipcode'] = split2[0].strip()
+                    newEvent['venue_city'] = split2[1].strip()
+                elif len(split2) == 1:
+                    newEvent['venue_city'] = split[1].strip()
             elif len(split) == 1:
                 newEvent['venue_name'] = split[0].strip()
 
@@ -126,6 +139,11 @@ def parseOwnerInformation(event, newEvent):
         website = owner.get('website')
         if website != None:
             newEvent['organizer_url'] = website
+
+def parseContent(event, newEvent):
+    description = event.get('description')
+    description = re.sub(r'(https?://[^\s,;:<>\[\]\(\)\{\}\\\"~#\|]+)', r'<a href="\1">\1</a>', description)
+    newEvent['content'] = description
 
 # Hashes can be used to compare events and find out whether they have changed or not.
 # It is important to only compare the original facebook events because wordpress events can be changed manually.
