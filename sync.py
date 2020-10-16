@@ -1,5 +1,5 @@
 import requests
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 import pytz
 from hashlib import blake2b
 
@@ -8,25 +8,38 @@ import converter
 
 fb_base_url = "https://graph.facebook.com"
 fb_page_id = "111101134055001"
+#fb_page_id = "200346284174326"
 #page_id = "115563666940099"
-fb_fields = "id, name, category, attending_count, description,  end_time, event_times, place,start_time, cover, owner{name, emails, phone, website}"
+#fb_fields = "id, name, category, attending_count, description,  end_time, event_times, place,start_time, cover, owner{name, emails, website}"
+fb_fields = "id, name, description,  end_time, event_times, place, start_time, cover, owner{name, emails, website}"
 
 wp_base_url = "http://localhost:8000/wp-json/events_api/v1"
-since_filter = "2020-09-30T12:00:00"
+since_filter = None#"2020-09-30T12:00:00"
 until_filter = None#"2020-09-23T21:00:00"
 
 wpEventsByFacebookId = {}
 fbEventsByFacebookId = {}
 
-def getEventsFromFacebook():
-    url = fb_base_url + '/' + fb_page_id + '/events?fields=' + fb_fields + '&access_token=' + config.fb_token
-    if since_filter != None:
-        url += ('&since='+ str(int(datetime.strptime(since_filter, '%Y-%m-%dT%H:%M:%S').timestamp())))
-    if until_filter != None:
-        url += ('&until='+ str(int(datetime.strptime(until_filter, '%Y-%m-%dT%H:%M:%S').timestamp())))
+def isExpired(events):
+    result = False
+    for event in reversed(events):
+        strEndTime = event.get('end_time')
+        if strEndTime != None:
+            endTime = datetime.strptime(strEndTime, "%Y-%m-%dT%H:%M:%S%z")
+            if endTime < (datetime.now(timezone.utc) - timedelta(days=60)):
+                result = True
+                break
+            else:
+                result = False
+                break
 
+    return result
+
+
+def makeFacebookRequest(url):
     print('Executing facebook request ' + url)
     response = requests.get(url)
+
     if response:
         print('Events request successful')
         print(response)
@@ -36,6 +49,36 @@ def getEventsFromFacebook():
         return None
 
     return response
+
+def getEventsFromFacebook():
+    url = fb_base_url + '/' + fb_page_id + '/events?fields=' + fb_fields + '&access_token=' + config.fb_token
+    if since_filter != None:
+        url += ('&since='+ str(int(datetime.strptime(since_filter, '%Y-%m-%dT%H:%M:%S').timestamp())))
+    if until_filter != None:
+        url += ('&until='+ str(int(datetime.strptime(until_filter, '%Y-%m-%dT%H:%M:%S').timestamp())))
+
+    response = makeFacebookRequest(url)
+    json = response.json()
+    events = json.get('data')
+    paging = json.get('paging')
+    expired = isExpired(events)
+    print('Received ' + str(len(events)) + ' events')
+
+    while paging != None and paging.get('next') != None and not expired:
+        response = makeFacebookRequest(json['paging']['next'])
+        json = response.json()
+        events1 = json.get('data')
+        events = events + events1
+        paging = json.get('paging')
+        expired = isExpired(events1)
+        print('Received ' + str(len(events1)) + ' events')
+    else:
+        if expired:
+            print('Last event is expired')
+        else:
+            print('End of data')
+
+    return events
 
 def getEventsFromWebsite():
     url = wp_base_url + '/events'
@@ -75,11 +118,17 @@ def createNewSubEvent(event, parentEvent):
     if parentEvent.get('cover') != None:
         newEvent['picture_url'] = parentEvent['cover']['source']
 
-    startTime = datetime.strptime(event['start_time'], "%Y-%m-%dT%H:%M:%S%z")
-    endTime = datetime.strptime(event['end_time'], "%Y-%m-%dT%H:%M:%S%z")
+    startTime = datetime.strptime(event.get('start_time'), "%Y-%m-%dT%H:%M:%S%z")
     newEvent['start_date'] = startTime.strftime("%Y-%m-%d %H:%M")
-    newEvent['end_date'] = endTime.strftime("%Y-%m-%d %H:%M")
 
+    strEndTime = event.get('end_time')
+    if strEndTime != None:
+        endTime = datetime.strptime(strEndTime, "%Y-%m-%dT%H:%M:%S%z")
+        newEvent['end_date'] = endTime.strftime("%Y-%m-%d %H:%M")
+    else:
+        newEvent['end_date'] = None
+
+    converter.parseContent(parentEvent, newEvent)
     converter.parseCategoryInformation(parentEvent, newEvent)
     converter.parseLocationInformation(parentEvent, newEvent)
     converter.parseOwnerInformation(parentEvent, newEvent)
@@ -100,21 +149,34 @@ def createNewEvent(event):
 
     if event.get('event_times') != None: # we are dealing with a recurring event with multiple start- and endtimes and it's own facebook id
         for subEvent in event['event_times']:
-            startTime = datetime.strptime(subEvent['start_time'], "%Y-%m-%dT%H:%M:%S%z")
-            endTime = datetime.strptime(subEvent['end_time'], "%Y-%m-%dT%H:%M:%S%z")
+            startTime = datetime.strptime(subEvent.get('start_time'), "%Y-%m-%dT%H:%M:%S%z")
 
             newSubEvent = newEvent.copy()
             newSubEvent['facebook_id'] = subEvent['id']
             newSubEvent['start_date'] = startTime.strftime("%Y-%m-%d %H:%M")
-            newSubEvent['end_date'] = endTime.strftime("%Y-%m-%d %H:%M")
+
+            strEndTime = subEvent.get('end_time')
+            if strEndTime != None:
+                endTime = datetime.strptime(strEndTime, "%Y-%m-%dT%H:%M:%S%z")
+                newSubEvent['end_date'] = endTime.strftime("%Y-%m-%d %H:%M")
+            else:
+                newEvent['end_date'] = None
+
             newEvents.append(newSubEvent)
     else: # this is single event with only one start- and endtime
-        startTime = datetime.strptime(event['start_time'], "%Y-%m-%dT%H:%M:%S%z")
-        endTime = datetime.strptime(event['end_time'], "%Y-%m-%dT%H:%M:%S%z")
+        startTime = datetime.strptime(event.get('start_time'), "%Y-%m-%dT%H:%M:%S%z")
         newEvent['start_date'] = startTime.strftime("%Y-%m-%d %H:%M")
-        newEvent['end_date'] = endTime.strftime("%Y-%m-%d %H:%M")
+
+        strEndTime = event.get('end_time')
+        if strEndTime != None:
+            endTime = datetime.strptime(strEndTime, "%Y-%m-%dT%H:%M:%S%z")
+            newEvent['end_date'] = endTime.strftime("%Y-%m-%d %H:%M")
+        else:
+            newEvent['end_date'] = None
+
         newEvents.append(newEvent)
 
+    converter.parseContent(event, newEvent)
     converter.parseCategoryInformation(event, newEvent)
     converter.parseLocationInformation(event, newEvent)
     converter.parseOwnerInformation(event, newEvent)
@@ -155,6 +217,8 @@ def putEvent(event):
     return response.text
 
 def bhash(content):
+    if content == None:
+        return None
     return blake2b(bytes(content, 'utf-8')).hexdigest()
 
 def eventIsUpdated(wpEvent, fbEvent, newEvent, subEvent):
@@ -169,36 +233,49 @@ def eventIsUpdated(wpEvent, fbEvent, newEvent, subEvent):
             #print('UPDATED: "'+ wpEvent['title'] + ' - ' + fbEvent['name'] + '"')
             print('UPDATED: "'+ str(meta.get('name_hash')) + '" - "' + str(bhash(fbEvent['name'])) + '"')
         if meta.get('description_hash') != bhash(fbEvent['description']):
-            newEvent['content'] = fbEvent['description']
+            converter.parseContent(fbEvent, newEvent)
+            #newEvent['content'] = fbEvent['description']
             newEvent['description_hash'] = bhash(fbEvent.get('description'))
             modified = True
             print('UPDATED: "' + wpEvent['content'] + ' - ' + fbEvent['description'] + '"')
         if subEvent != None:
-            if meta.get('start_time_hash') != bhash(subEvent['start_time']):
+            if meta.get('start_time_hash') != bhash(subEvent.get('start_time')):
                 startTime = datetime.strptime(subEvent['start_time'], "%Y-%m-%dT%H:%M:%S%z")
                 newEvent['start_date'] = startTime.strftime("%Y-%m-%d %H:%M")
                 newEvent['start_time_hash'] = bhash(subEvent.get('start_time'))
                 modified = True
                 print('UPDATED: "' + wpEvent['meta']['event_start_date'] + ' - ' + str(startTime) + '"')
-            if meta.get('end_time_hash') != bhash(subEvent['end_time']):
-                endTime = datetime.strptime(subEvent['end_time'], "%Y-%m-%dT%H:%M:%S%z")
-                newEvent['end_date'] = endTime.strftime("%Y-%m-%d %H:%M")
-                newEvent['end_time_hash'] = bhash(subEvent.get('end_time'))
-                modified = True
-                print('UPDATED: "' + wpEvent['meta']['event_end_date'] + ' - ' + str(endTime) + '"')
+            strEndTime = subEvent.get('end_time')
+            if meta.get('end_time_hash') != bhash(strEndTime):
+                if strEndTime != None:
+                    endTime = datetime.strptime(strEndTime, "%Y-%m-%dT%H:%M:%S%z")
+                    newEvent['end_date'] = endTime.strftime("%Y-%m-%d %H:%M")
+                    newEvent['end_time_hash'] = bhash(strEndTime)
+                    modified = True
+                    print('UPDATED: "' + wpEvent['meta']['event_end_date'] + ' - ' + str(endTime) + '"')
+                else:
+                    newEvent['end_date'] = None
+                    newEvent['end_time_hash'] = None
+                    modified = True
         else:
-            if meta.get('start_time_hash') != bhash(fbEvent['start_time']):
-                startTime = datetime.strptime(fbEvent['start_time'], "%Y-%m-%dT%H:%M:%S%z")
+            if meta.get('start_time_hash') != bhash(fbEvent.get('start_time')):
+                startTime = datetime.strptime(fbEvent.get('start_time'), "%Y-%m-%dT%H:%M:%S%z")
                 newEvent['start_date'] = startTime.strftime("%Y-%m-%d %H:%M")
                 newEvent['start_time_hash'] = bhash(fbEvent.get('start_time'))
                 modified = True
                 print('UPDATED: "' + wpEvent['meta']['event_start_date'] + ' - ' + str(startTime) + '"')
-            if meta.get('end_time_hash') != bhash(fbEvent['end_time']):
-                endTime = datetime.strptime(fbEvent['end_time'], "%Y-%m-%dT%H:%M:%S%z")
-                newEvent['end_date'] = endTime.strftime("%Y-%m-%d %H:%M")
-                newEvent['end_time_hash'] = bhash(fbEvent.get('end_time'))
-                modified = True
-                print('UPDATED: "' + wpEvent['meta']['event_end_date'] + ' - ' + str(endTime) + '"')
+            strEndTime = fbEvent.get('end_time')
+            if meta.get('end_time_hash') != bhash(strEndTime):
+                if strEndTime != None:
+                    endTime = datetime.strptime(strEndTime, "%Y-%m-%dT%H:%M:%S%z")
+                    newEvent['end_date'] = endTime.strftime("%Y-%m-%d %H:%M")
+                    newEvent['end_time_hash'] = bhash(fbEvent.get('end_time'))
+                    modified = True
+                    print('UPDATED: "' + wpEvent['meta']['event_end_date'] + ' - ' + str(endTime) + '"')
+                else:
+                    newEvent['end_date'] = None
+                    newEvent['end_time_hash'] = None
+                    modified = True
         if meta.get('place_hash') != bhash(str(fbEvent.get('place'))):
             # for now add picture when there is none. We may need a way to detect if a picture has been changed
             if fbEvent.get('place') != None:
@@ -216,7 +293,7 @@ def eventIsUpdated(wpEvent, fbEvent, newEvent, subEvent):
         if meta.get('cover_hash') != bhash(str(fbEvent.get('cover'))):
             # for now add picture when there is none. We may need a way to detect if a picture has been changed
             if fbEvent.get('cover') != None:
-                newEvent['picture_url'] = fbEvent['cover']['source']
+                newEvent['picture_url'] = fbEvent['cover'].get('source')
                 newEvent['cover_hash'] = bhash(str(fbEvent.get('cover')))
                 modified = True
                 print('UPDATED COVER')
@@ -270,7 +347,7 @@ def compare(fbEvents):
                             convertedEvent = createNewSubEvent(subEvent, fbEvent)
                             convertedEvent.pop('picture_url', None)
                             convertedEvent['thumbnail_id'] = subEventThumbnailId
-                            print(str(convertedEvent))
+                            #print(str(convertedEvent))
                             postEvent(convertedEvent)
             else:
                 print('No match and no subevents, creating new event')
@@ -362,8 +439,7 @@ def execute4():
         print('Synchronisation failed, returning')
         return
 
-    dict2 = events.json()['data']
-    for item in dict2:
+    for item in events:
         print('Event found; id: ' + item['id'] + '; name: ' + item['name'] + '; time: ' + item['start_time'])
         if item.get('place') != None and item['place'].get('name') != None:
             print('--place: ' + item['place']['name'] )
@@ -378,7 +454,7 @@ def execute4():
     # writeEventsToFile(str(newEvents), 'fb_events.txt')
     # print(str(len(dict2)) + ' events counted')
 
-    compare(dict2)
+    compare(events)
     detectCancelledEvents(dict1)
 
     print('Importing facebook events done')
