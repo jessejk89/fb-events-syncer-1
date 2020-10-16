@@ -221,7 +221,7 @@ def bhash(content):
         return None
     return blake2b(bytes(content, 'utf-8')).hexdigest()
 
-def eventIsUpdated(wpEvent, fbEvent, newEvent, subEvent):
+def eventIsUpdated(wpEvent, fbEvent, newEvent, subEvent, subEventThumbnailId):
     modified = False
 
     meta = wpEvent.get('meta')
@@ -291,9 +291,11 @@ def eventIsUpdated(wpEvent, fbEvent, newEvent, subEvent):
                 modified = True
                 print('UPDATED OWNER')
         if meta.get('cover_hash') != bhash(str(fbEvent.get('cover'))):
-            # for now add picture when there is none. We may need a way to detect if a picture has been changed
             if fbEvent.get('cover') != None:
-                newEvent['picture_url'] = fbEvent['cover'].get('source')
+                if subEventThumbnailId != None:
+                    newEvent['thumbnail_id'] = subEventThumbnailId
+                else:
+                    newEvent['picture_url'] = fbEvent['cover'].get('source')
                 newEvent['cover_hash'] = bhash(str(fbEvent.get('cover')))
                 modified = True
                 print('UPDATED COVER')
@@ -309,7 +311,7 @@ def compare(fbEvents):
             newEvent = {'id': wpEvent['id']}
 
             #TODO: compare all fields and check if event is now a recurring event
-            if eventIsUpdated(wpEvent, fbEvent, newEvent, None):
+            if eventIsUpdated(wpEvent, fbEvent, newEvent, None, None):
                 putEvent(newEvent)
             else:
                 print("No updates detected for main event")
@@ -328,8 +330,12 @@ def compare(fbEvents):
                         modified2 = False
 
                         #TODO: compare all fields and check if event is now a recurring event
-                        if eventIsUpdated(wpEvent2, fbEvent, newEvent, subEvent):
-                            putEvent(newEvent)
+                        if eventIsUpdated(wpEvent2, fbEvent, newEvent, subEvent, subEventThumbnailId):
+                            eventId = putEvent(newEvent)
+                            if subEventThumbnailId == None:
+                                print("Thumbnail does not exist yet for updated event " + eventId)
+                                serverEvent = getEvent(eventId).json()
+                                subEventThumbnailId = serverEvent.get('meta').get('_thumbnail_id')
                         else:
                             print("No updates detected for recurring subevent")
                     else:
