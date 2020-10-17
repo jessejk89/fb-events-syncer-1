@@ -1,6 +1,45 @@
 import re
 from hashlib import blake2b
 
+regex = r'('
+
+# Scheme (HTTP, HTTPS, FTP and SFTP):
+regex += r'(?:(?:(?:(?P<protocol>https?|s?ftp):\/\/)?'
+
+# www:
+regex += r'(?:www\.)?)'
+
+#Email prefix
+regex += r'|(?P<email_prefix>[a-zA-Z0-9_.+-]+@))'
+
+regex += r'(?:'
+
+# Host and domain (including ccSLD):
+regex += r'(?:(?:[A-Z0-9][A-Z0-9-]{0,61}[A-Z0-9]\.)+)'
+
+# TLD:
+regex += r'(?:[A-Z]{2,})'
+
+# IP Address:
+regex += r'|(?:\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})'
+
+regex += r')'
+
+# Port:
+regex += r'(?::(?:\d{1,5}))?'
+
+# Query path:
+regex += r'(?:(?:\/\S+)*[A-Z0-9/])?'
+
+regex += r')'
+
+def substituteUrl(m):
+    if m.group('email_prefix') != None: # match has an email prefix
+            return '<a href="mailto: ' + m.group(0) + '">' + m.group(0) + '</a>'
+    elif m.group('protocol') == None:
+        return '<a href="http://' + m.group(0) + '">' + m.group(0) + '</a>'
+    return '<a href="' + m.group(0) + '">' + m.group(0) + '</a>'
+
 def bhash(content):
     if content == None:
         return None
@@ -142,7 +181,8 @@ def parseOwnerInformation(event, newEvent):
 
 def parseContent(event, newEvent):
     description = event.get('description')
-    description = re.sub(r'(https?://[^\s,;:<>\[\]\(\)\{\}\\\"~#\|]+)', r'<a href="\1">\1</a>', description)
+    #description = re.sub(r'((?:(https?|s?ftp):\/\/)?(?:www\.)?((?:(?:[A-Z0-9][A-Z0-9-]{0,61}[A-Z0-9]\.)+)([A-Z]{2,6})|(?:\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}))(?::(\d{1,5}))?(?:(\/\S+)*))', r'<a href="\1">\1</a>', description)
+    description = re.sub(regex, substituteUrl, description, flags=re.I)
     newEvent['content'] = description
 
 # Hashes can be used to compare events and find out whether they have changed or not.
