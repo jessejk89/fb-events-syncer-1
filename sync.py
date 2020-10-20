@@ -221,22 +221,29 @@ def bhash(content):
         return None
     return blake2b(bytes(content, 'utf-8')).hexdigest()
 
-def eventIsUpdated(wpEvent, fbEvent, newEvent, subEvent, subEventThumbnailId):
+def eventIsUpdated(wpEvent, fbEvent, newEvent, subEvent = None, subEventThumbnailId = None, compareFields = ['name', 'description', 'start_time', 'end_time', 'place', 'owner', 'cover']):
+    if len(compareFields) == 7:
+        print("Doing an extensive comparison")
+    else:
+        print("Doing a superficial comparison")
     modified = False
+    modifiedFields = []
 
     meta = wpEvent.get('meta')
     if meta != None:
-        if meta.get('name_hash') != bhash(fbEvent['name']):
+        if 'name' in compareFields and meta.get('name_hash') != bhash(fbEvent['name']):
             newEvent['title'] = fbEvent['name']
             newEvent['name_hash'] = bhash(fbEvent.get('name'))
             modified = True
+            modifiedFields.append('name')
             #print('UPDATED: "'+ wpEvent['title'] + ' - ' + fbEvent['name'] + '"')
             print('UPDATED: "'+ str(meta.get('name_hash')) + '" - "' + str(bhash(fbEvent['name'])) + '"')
-        if meta.get('description_hash') != bhash(fbEvent['description']):
+        if 'description' in compareFields and meta.get('description_hash') != bhash(fbEvent['description']):
             converter.parseContent(fbEvent, newEvent)
             #newEvent['content'] = fbEvent['description']
             newEvent['description_hash'] = bhash(fbEvent.get('description'))
             modified = True
+            modifiedFields.append('description')
             print('UPDATED: "' + wpEvent['content'] + ' - ' + fbEvent['description'] + '"')
         if subEvent != None:
             if meta.get('start_time_hash') != bhash(subEvent.get('start_time')):
@@ -244,6 +251,7 @@ def eventIsUpdated(wpEvent, fbEvent, newEvent, subEvent, subEventThumbnailId):
                 newEvent['start_date'] = startTime.strftime("%Y-%m-%d %H:%M")
                 newEvent['start_time_hash'] = bhash(subEvent.get('start_time'))
                 modified = True
+                modifiedFields.append('start_time')
                 print('UPDATED: "' + wpEvent['meta']['event_start_date'] + ' - ' + str(startTime) + '"')
             strEndTime = subEvent.get('end_time')
             if meta.get('end_time_hash') != bhash(strEndTime):
@@ -252,17 +260,20 @@ def eventIsUpdated(wpEvent, fbEvent, newEvent, subEvent, subEventThumbnailId):
                     newEvent['end_date'] = endTime.strftime("%Y-%m-%d %H:%M")
                     newEvent['end_time_hash'] = bhash(strEndTime)
                     modified = True
+                    modifiedFields.append('end_time')
                     print('UPDATED: "' + wpEvent['meta']['event_end_date'] + ' - ' + str(endTime) + '"')
                 else:
                     newEvent['end_date'] = None
                     newEvent['end_time_hash'] = None
                     modified = True
+                    modifiedFields.append('end_time')
         else:
             if meta.get('start_time_hash') != bhash(fbEvent.get('start_time')):
                 startTime = datetime.strptime(fbEvent.get('start_time'), "%Y-%m-%dT%H:%M:%S%z")
                 newEvent['start_date'] = startTime.strftime("%Y-%m-%d %H:%M")
                 newEvent['start_time_hash'] = bhash(fbEvent.get('start_time'))
                 modified = True
+                modifiedFields.append('start_time')
                 print('UPDATED: "' + wpEvent['meta']['event_start_date'] + ' - ' + str(startTime) + '"')
             strEndTime = fbEvent.get('end_time')
             if meta.get('end_time_hash') != bhash(strEndTime):
@@ -271,27 +282,32 @@ def eventIsUpdated(wpEvent, fbEvent, newEvent, subEvent, subEventThumbnailId):
                     newEvent['end_date'] = endTime.strftime("%Y-%m-%d %H:%M")
                     newEvent['end_time_hash'] = bhash(fbEvent.get('end_time'))
                     modified = True
+                    modifiedFields.append('end_time')
                     print('UPDATED: "' + wpEvent['meta']['event_end_date'] + ' - ' + str(endTime) + '"')
                 else:
                     newEvent['end_date'] = None
                     newEvent['end_time_hash'] = None
                     modified = True
-        if meta.get('place_hash') != bhash(str(fbEvent.get('place'))):
+                    modifiedFields.append('end_time')
+        if 'place' in compareFields and meta.get('place_hash') != bhash(str(fbEvent.get('place'))):
             # for now add picture when there is none. We may need a way to detect if a picture has been changed
             if fbEvent.get('place') != None:
                 converter.parseLocationInformation(fbEvent, newEvent)
                 newEvent['place_hash'] = bhash(str(fbEvent.get('place')))
                 modified = True
+                modifiedFields.append('place')
                 print('UPDATED PLACE')
-        if meta.get('owner_hash') != bhash(str(fbEvent.get('owner'))):
+        if 'owner' in compareFields and meta.get('owner_hash') != bhash(str(fbEvent.get('owner'))):
             # for now add picture when there is none. We may need a way to detect if a picture has been changed
             if fbEvent.get('owner') != None:
                 converter.parseOwnerInformation(fbEvent, newEvent)
                 newEvent['owner_hash'] = bhash(str(fbEvent.get('owner')))
                 modified = True
+                modifiedFields.append('owner')
                 print('UPDATED OWNER')
-
-        if fbEvent.get('cover') != None and fbEvent['cover'].get('source') != None:
+        # TODO: would be nice if I don't have to compare the cover (and do an HTTP-request) for all recurring subevents when I already know it's changed
+        # Those requests make the script more slow
+        if 'cover' in compareFields and fbEvent.get('cover') != None and fbEvent['cover'].get('source') != None:
             response = requests.get(fbEvent['cover']['source'])
             hash = bhash(str(response.content))
             if meta.get('_cover_bytes_hash') != hash:
@@ -301,6 +317,7 @@ def eventIsUpdated(wpEvent, fbEvent, newEvent, subEvent, subEventThumbnailId):
                     newEvent['picture_url'] = fbEvent['cover'].get('source')
                 newEvent['_cover_bytes_hash'] = hash
                 modified = True
+                modifiedFields.append('cover')
                 print('UPDATED COVER BYTES')
             else:
                 print('cover bytes are not changed')
@@ -314,7 +331,8 @@ def eventIsUpdated(wpEvent, fbEvent, newEvent, subEvent, subEventThumbnailId):
         #         modified = True
         #         print('UPDATED COVER')
 
-        return modified
+        #return modified
+        return modifiedFields
 
 def compare(fbEvents):
     for fbEvent in fbEvents:
@@ -325,7 +343,8 @@ def compare(fbEvents):
             newEvent = {'id': wpEvent['id']}
 
             #TODO: compare all fields and check if event is now a recurring event
-            if eventIsUpdated(wpEvent, fbEvent, newEvent, None, None):
+            modFields = eventIsUpdated(wpEvent, fbEvent, newEvent)
+            if len(modFields) > 0:
                 putEvent(newEvent)
             else:
                 print("No updates detected for main event")
@@ -334,6 +353,7 @@ def compare(fbEvents):
             subEventThumbnailId = None
             if fbEvent.get('event_times') != None:
                 print('...trying subevents')
+                modifiedFields = ['name', 'description', 'start_time', 'end_time', 'place', 'owner', 'cover']
                 for subEvent in fbEvent['event_times']:
                     wpEvent2 = wpEventsByFacebookId.get(subEvent['id'])
                     if wpEvent2 != None:
@@ -343,8 +363,8 @@ def compare(fbEvents):
                         newEvent = {'id': wpEvent2['id']}
                         modified2 = False
 
-                        #TODO: not all fields need to be compared for all recurring events, if description changes, it changes for all subEvents the same
-                        if eventIsUpdated(wpEvent2, fbEvent, newEvent, subEvent, subEventThumbnailId):
+                        modifiedFields = eventIsUpdated(wpEvent2, fbEvent, newEvent, subEvent, subEventThumbnailId, modifiedFields)
+                        if len(modifiedFields) > 0:
                             eventId = putEvent(newEvent)
                             if subEventThumbnailId == None:
                                 print("Thumbnail does not exist yet for updated event " + eventId)
