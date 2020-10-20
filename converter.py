@@ -1,4 +1,5 @@
 import re
+import requests
 from hashlib import blake2b
 
 regex = r'('
@@ -194,8 +195,12 @@ def createFacebookHashValuesRecurringEvent(fbEvent, parentFbEvent, newEvent):
     newEvent['end_time_hash'] = bhash(fbEvent.get('end_time'))
     newEvent['place_hash'] = bhash(str(parentFbEvent.get('place')))
     newEvent['owner_hash'] = bhash(str(parentFbEvent.get('owner')))
-    newEvent['cover_hash'] = bhash(str(parentFbEvent.get('cover')))
+    #newEvent['cover_hash'] = bhash(str(parentFbEvent.get('cover')))
 
+    # the acual image needs to be hashed because facebook changes the source url at least once a day, which leads to false positives
+    if parentFbEvent.get('cover') != None and parentFbEvent['cover'].get('source') != None:
+        response = requests.get(parentFbEvent['cover']['source'])
+        newEvent['_cover_bytes_hash'] = bhash(str(response.content))
 
 def createFacebookHashValues(fbEvent, newEvent):
     newEvent['name_hash'] = bhash(fbEvent.get('name'))
@@ -204,4 +209,9 @@ def createFacebookHashValues(fbEvent, newEvent):
     newEvent['end_time_hash'] = bhash(fbEvent.get('end_time'))
     newEvent['place_hash'] = bhash(str(fbEvent.get('place')))
     newEvent['owner_hash'] = bhash(str(fbEvent.get('owner')))
-    newEvent['cover_hash'] = bhash(str(fbEvent.get('cover')))
+    #newEvent['cover_hash'] = bhash(str(fbEvent.get('cover')))
+
+    # the acual image needs to be hashed because facebook changes the source url at least once a day, which leads to false positives
+    if fbEvent.get('cover') != None and fbEvent['cover'].get('source') != None:
+        response = requests.get(fbEvent['cover']['source'])
+        newEvent['_cover_bytes_hash'] = bhash(str(response.content))

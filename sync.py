@@ -290,15 +290,29 @@ def eventIsUpdated(wpEvent, fbEvent, newEvent, subEvent, subEventThumbnailId):
                 newEvent['owner_hash'] = bhash(str(fbEvent.get('owner')))
                 modified = True
                 print('UPDATED OWNER')
-        if meta.get('cover_hash') != bhash(str(fbEvent.get('cover'))):
-            if fbEvent.get('cover') != None:
+
+        if fbEvent.get('cover') != None and fbEvent['cover'].get('source') != None:
+            response = requests.get(fbEvent['cover']['source'])
+            hash = bhash(str(response.content))
+            if meta.get('_cover_bytes_hash') != hash:
                 if subEventThumbnailId != None:
                     newEvent['thumbnail_id'] = subEventThumbnailId
                 else:
                     newEvent['picture_url'] = fbEvent['cover'].get('source')
-                newEvent['cover_hash'] = bhash(str(fbEvent.get('cover')))
+                newEvent['_cover_bytes_hash'] = hash
                 modified = True
-                print('UPDATED COVER')
+                print('UPDATED COVER BYTES')
+            else:
+                print('cover bytes are not changed')
+        # if meta.get('cover_hash') != bhash(str(fbEvent.get('cover'))):
+        #     if fbEvent.get('cover') != None:
+        #         if subEventThumbnailId != None:
+        #             newEvent['thumbnail_id'] = subEventThumbnailId
+        #         else:
+        #             newEvent['picture_url'] = fbEvent['cover'].get('source')
+        #         newEvent['cover_hash'] = bhash(str(fbEvent.get('cover')))
+        #         modified = True
+        #         print('UPDATED COVER')
 
         return modified
 
@@ -329,7 +343,7 @@ def compare(fbEvents):
                         newEvent = {'id': wpEvent2['id']}
                         modified2 = False
 
-                        #TODO: compare all fields and check if event is now a recurring event
+                        #TODO: not all fields need to be compared for all recurring events, if description changes, it changes for all subEvents the same
                         if eventIsUpdated(wpEvent2, fbEvent, newEvent, subEvent, subEventThumbnailId):
                             eventId = putEvent(newEvent)
                             if subEventThumbnailId == None:
@@ -461,7 +475,7 @@ def execute4():
     # print(str(len(dict2)) + ' events counted')
 
     compare(events)
-    detectCancelledEvents(dict1)
+    #detectCancelledEvents(dict1)
 
     print('Importing facebook events done')
 
