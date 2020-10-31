@@ -5,12 +5,11 @@ from hashlib import blake2b
 
 import config
 import converter
+import utils
 
 fb_base_url = "https://graph.facebook.com"
 fb_page_id = "111101134055001"
 #fb_page_id = "200346284174326"
-#page_id = "115563666940099"
-#fb_fields = "id, name, category, attending_count, description,  end_time, event_times, place,start_time, cover, owner{name, emails, website}"
 fb_fields = "id, name, description,  end_time, event_times, place, start_time, cover, owner{name, emails, website}"
 
 wp_base_url = "http://127.0.0.1/wp-json/events_api/v1"
@@ -223,11 +222,6 @@ def putEvent(event):
     print('Text: ' + response.text)
     return response.text
 
-def bhash(content):
-    if content == None:
-        return None
-    return blake2b(bytes(content, 'utf-8')).hexdigest()
-
 def eventIsUpdated(wpEvent, fbEvent, newEvent, subEvent = None, subEventThumbnailId = None, compareFields = ['name', 'description', 'start_time', 'end_time', 'place', 'owner', 'cover']):
     if len(compareFields) == 7:
         print("Doing an extensive comparison")
@@ -238,34 +232,34 @@ def eventIsUpdated(wpEvent, fbEvent, newEvent, subEvent = None, subEventThumbnai
 
     meta = wpEvent.get('meta')
     if meta != None:
-        if 'name' in compareFields and meta.get('name_hash') != bhash(fbEvent['name']):
+        if 'name' in compareFields and meta.get('name_hash') != utils.bhash(fbEvent['name']):
             newEvent['title'] = fbEvent['name']
-            newEvent['name_hash'] = bhash(fbEvent.get('name'))
+            newEvent['name_hash'] = utils.bhash(fbEvent.get('name'))
             modified = True
             modifiedFields.append('name')
             #print('UPDATED: "'+ wpEvent['title'] + ' - ' + fbEvent['name'] + '"')
-            print('UPDATED: "'+ str(meta.get('name_hash')) + '" - "' + str(bhash(fbEvent['name'])) + '"')
-        if 'description' in compareFields and meta.get('description_hash') != bhash(fbEvent['description']):
+            print('UPDATED: "'+ str(meta.get('name_hash')) + '" - "' + str(utils.bhash(fbEvent['name'])) + '"')
+        if 'description' in compareFields and meta.get('description_hash') != utils.bhash(fbEvent['description']):
             converter.parseContent(fbEvent, newEvent)
             #newEvent['content'] = fbEvent['description']
-            newEvent['description_hash'] = bhash(fbEvent.get('description'))
+            newEvent['description_hash'] = utils.bhash(fbEvent.get('description'))
             modified = True
             modifiedFields.append('description')
             print('UPDATED: "' + wpEvent['content'] + ' - ' + fbEvent['description'] + '"')
         if subEvent != None:
-            if meta.get('start_time_hash') != bhash(subEvent.get('start_time')):
+            if meta.get('start_time_hash') != utils.bhash(subEvent.get('start_time')):
                 startTime = datetime.strptime(subEvent['start_time'], "%Y-%m-%dT%H:%M:%S%z")
                 newEvent['start_date'] = startTime.strftime("%Y-%m-%d %H:%M")
-                newEvent['start_time_hash'] = bhash(subEvent.get('start_time'))
+                newEvent['start_time_hash'] = utils.bhash(subEvent.get('start_time'))
                 modified = True
                 modifiedFields.append('start_time')
                 print('UPDATED: "' + wpEvent['meta']['event_start_date'] + ' - ' + str(startTime) + '"')
             strEndTime = subEvent.get('end_time')
-            if meta.get('end_time_hash') != bhash(strEndTime):
+            if meta.get('end_time_hash') != utils.bhash(strEndTime):
                 if strEndTime != None:
                     endTime = datetime.strptime(strEndTime, "%Y-%m-%dT%H:%M:%S%z")
                     newEvent['end_date'] = endTime.strftime("%Y-%m-%d %H:%M")
-                    newEvent['end_time_hash'] = bhash(strEndTime)
+                    newEvent['end_time_hash'] = utils.bhash(strEndTime)
                     modified = True
                     modifiedFields.append('end_time')
                     print('UPDATED: "' + wpEvent['meta']['event_end_date'] + ' - ' + str(endTime) + '"')
@@ -275,19 +269,19 @@ def eventIsUpdated(wpEvent, fbEvent, newEvent, subEvent = None, subEventThumbnai
                     modified = True
                     modifiedFields.append('end_time')
         else:
-            if meta.get('start_time_hash') != bhash(fbEvent.get('start_time')):
+            if meta.get('start_time_hash') != utils.bhash(fbEvent.get('start_time')):
                 startTime = datetime.strptime(fbEvent.get('start_time'), "%Y-%m-%dT%H:%M:%S%z")
                 newEvent['start_date'] = startTime.strftime("%Y-%m-%d %H:%M")
-                newEvent['start_time_hash'] = bhash(fbEvent.get('start_time'))
+                newEvent['start_time_hash'] = utils.bhash(fbEvent.get('start_time'))
                 modified = True
                 modifiedFields.append('start_time')
                 print('UPDATED: "' + wpEvent['meta']['event_start_date'] + ' - ' + str(startTime) + '"')
             strEndTime = fbEvent.get('end_time')
-            if meta.get('end_time_hash') != bhash(strEndTime):
+            if meta.get('end_time_hash') != utils.bhash(strEndTime):
                 if strEndTime != None:
                     endTime = datetime.strptime(strEndTime, "%Y-%m-%dT%H:%M:%S%z")
                     newEvent['end_date'] = endTime.strftime("%Y-%m-%d %H:%M")
-                    newEvent['end_time_hash'] = bhash(fbEvent.get('end_time'))
+                    newEvent['end_time_hash'] = utils.bhash(fbEvent.get('end_time'))
                     modified = True
                     modifiedFields.append('end_time')
                     print('UPDATED: "' + wpEvent['meta']['event_end_date'] + ' - ' + str(endTime) + '"')
@@ -296,19 +290,19 @@ def eventIsUpdated(wpEvent, fbEvent, newEvent, subEvent = None, subEventThumbnai
                     newEvent['end_time_hash'] = None
                     modified = True
                     modifiedFields.append('end_time')
-        if 'place' in compareFields and meta.get('place_hash') != bhash(str(fbEvent.get('place'))):
+        if 'place' in compareFields and meta.get('place_hash') != utils.bhash(str(fbEvent.get('place'))):
             # for now add picture when there is none. We may need a way to detect if a picture has been changed
             if fbEvent.get('place') != None:
                 converter.parseLocationInformation(fbEvent, newEvent)
-                newEvent['place_hash'] = bhash(str(fbEvent.get('place')))
+                newEvent['place_hash'] = utils.bhash(str(fbEvent.get('place')))
                 modified = True
                 modifiedFields.append('place')
                 print('UPDATED PLACE')
-        if 'owner' in compareFields and meta.get('owner_hash') != bhash(str(fbEvent.get('owner'))):
+        if 'owner' in compareFields and meta.get('owner_hash') != utils.bhash(str(fbEvent.get('owner'))):
             # for now add picture when there is none. We may need a way to detect if a picture has been changed
             if fbEvent.get('owner') != None:
                 converter.parseOwnerInformation(fbEvent, newEvent)
-                newEvent['owner_hash'] = bhash(str(fbEvent.get('owner')))
+                newEvent['owner_hash'] = utils.bhash(str(fbEvent.get('owner')))
                 modified = True
                 modifiedFields.append('owner')
                 print('UPDATED OWNER')
@@ -316,7 +310,7 @@ def eventIsUpdated(wpEvent, fbEvent, newEvent, subEvent = None, subEventThumbnai
         # Those requests make the script more slow
         if 'cover' in compareFields and fbEvent.get('cover') != None and fbEvent['cover'].get('source') != None:
             response = requests.get(fbEvent['cover']['source'])
-            hash = bhash(str(response.content))
+            hash = utils.bhash(str(response.content))
             if meta.get('_cover_bytes_hash') != hash:
                 if subEventThumbnailId != None:
                     newEvent['thumbnail_id'] = subEventThumbnailId
@@ -328,13 +322,13 @@ def eventIsUpdated(wpEvent, fbEvent, newEvent, subEvent = None, subEventThumbnai
                 print('UPDATED COVER BYTES')
             else:
                 print('cover bytes are not changed')
-        # if meta.get('cover_hash') != bhash(str(fbEvent.get('cover'))):
+        # if meta.get('cover_hash') != utils.bhash(str(fbEvent.get('cover'))):
         #     if fbEvent.get('cover') != None:
         #         if subEventThumbnailId != None:
         #             newEvent['thumbnail_id'] = subEventThumbnailId
         #         else:
         #             newEvent['picture_url'] = fbEvent['cover'].get('source')
-        #         newEvent['cover_hash'] = bhash(str(fbEvent.get('cover')))
+        #         newEvent['cover_hash'] = utils.bhash(str(fbEvent.get('cover')))
         #         modified = True
         #         print('UPDATED COVER')
 
@@ -419,50 +413,6 @@ def writeEventsToFile(events, filename):
     file  = open(filename, 'w', encoding='utf-8')
     file.write(events)
     file.close()
-
-def execute():
-    events = getEventsFromFacebook()
-    if events == None:
-        return
-    writeEventsToFile(events.text, 'fb_events.txt')
-    dict1 = events.json()['data']
-    print(str(len(dict1)) + ' events counted')
-
-    for item in dict1:
-        print('Event found; id: ' + item['id'] + '; name: ' + item['name'] + '; place: ' + item['place']['name'] + '; time: ' + item['start_time'])
-
-def execute2():
-    events = getEventsFromWebsite()
-    if events == None:
-        return
-    writeEventsToFile(events.text, 'wp_events.txt')
-    dict1 = events.json()
-    print(str(len(dict1)) + ' events counted')
-
-    for item in dict1:
-        s = 'Event found; id: ' + item['id'] + '; title: ' + item['title']
-        if item['meta'] != None:
-            s = s + '; place: ' + item.get('meta').get('venue_name', 'None') + '; date: ' + item.get('meta').get('event_start_date', 'None')
-        print(s.encode('utf-8'))
-
-def execute3():
-    events = getEventsFromFacebook()
-    if events == None:
-        return
-
-    dict1 = events.json()['data']
-    for item in dict1:
-        print('Event processed; id: ' + item['id'] + '; name: ' + item['name'] + '; place: ' + item['place']['name'] + '; time: ' + item['start_time'])
-
-    newEvents = reversed(createNewEvents(dict1))
-
-    writeEventsToFile(str(newEvents), 'fb_events.txt')
-    print(str(len(dict1)) + ' events counted')
-
-    for e in newEvents:
-        postEvent(e)
-
-    print('Importing facebook events done')
 
 def execute4():
     # prepare hash table with website events for easy, fast access

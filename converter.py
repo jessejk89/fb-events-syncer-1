@@ -1,6 +1,7 @@
 import re
 import requests
-from hashlib import blake2b
+
+import utils
 
 regex = r'('
 
@@ -40,11 +41,6 @@ def substituteUrl(m):
     elif m.group('protocol') == None:
         return '<a href="http://' + m.group(0) + '">' + m.group(0) + '</a>'
     return '<a href="' + m.group(0) + '">' + m.group(0) + '</a>'
-
-def bhash(content):
-    if content == None:
-        return None
-    return blake2b(bytes(content, 'utf-8')).hexdigest()
 
 def parseCategoryInformation(event, newEvent):
     # make an educated guess about the category: review is needed by a human
@@ -189,29 +185,29 @@ def parseContent(event, newEvent):
 # Hashes can be used to compare events and find out whether they have changed or not.
 # It is important to only compare the original facebook events because wordpress events can be changed manually.
 def createFacebookHashValuesRecurringEvent(fbEvent, parentFbEvent, newEvent):
-    newEvent['name_hash'] = bhash(parentFbEvent.get('name'))
-    newEvent['description_hash'] = bhash(parentFbEvent.get('description'))
-    newEvent['start_time_hash'] = bhash(fbEvent.get('start_time'))
-    newEvent['end_time_hash'] = bhash(fbEvent.get('end_time'))
-    newEvent['place_hash'] = bhash(str(parentFbEvent.get('place')))
-    newEvent['owner_hash'] = bhash(str(parentFbEvent.get('owner')))
-    #newEvent['cover_hash'] = bhash(str(parentFbEvent.get('cover')))
+    newEvent['name_hash'] = utils.bhash(parentFbEvent.get('name'))
+    newEvent['description_hash'] = utils.bhash(parentFbEvent.get('description'))
+    newEvent['start_time_hash'] = utils.bhash(fbEvent.get('start_time'))
+    newEvent['end_time_hash'] = utils.bhash(fbEvent.get('end_time'))
+    newEvent['place_hash'] = utils.bhash(str(parentFbEvent.get('place')))
+    newEvent['owner_hash'] = utils.bhash(str(parentFbEvent.get('owner')))
+    #newEvent['cover_hash'] = utils.bhash(str(parentFbEvent.get('cover')))
 
     # the acual image needs to be hashed because facebook changes the source url at least once a day, which leads to false positives
     if parentFbEvent.get('cover') != None and parentFbEvent['cover'].get('source') != None:
         response = requests.get(parentFbEvent['cover']['source'])
-        newEvent['_cover_bytes_hash'] = bhash(str(response.content))
+        newEvent['_cover_bytes_hash'] = utils.bhash(str(response.content))
 
 def createFacebookHashValues(fbEvent, newEvent):
-    newEvent['name_hash'] = bhash(fbEvent.get('name'))
-    newEvent['description_hash'] = bhash(fbEvent.get('description'))
-    newEvent['start_time_hash'] = bhash(fbEvent.get('start_time'))
-    newEvent['end_time_hash'] = bhash(fbEvent.get('end_time'))
-    newEvent['place_hash'] = bhash(str(fbEvent.get('place')))
-    newEvent['owner_hash'] = bhash(str(fbEvent.get('owner')))
-    #newEvent['cover_hash'] = bhash(str(fbEvent.get('cover')))
+    newEvent['name_hash'] = utils.bhash(fbEvent.get('name'))
+    newEvent['description_hash'] = utils.bhash(fbEvent.get('description'))
+    newEvent['start_time_hash'] = utils.bhash(fbEvent.get('start_time'))
+    newEvent['end_time_hash'] = utils.bhash(fbEvent.get('end_time'))
+    newEvent['place_hash'] = utils.bhash(str(fbEvent.get('place')))
+    newEvent['owner_hash'] = utils.bhash(str(fbEvent.get('owner')))
+    #newEvent['cover_hash'] = utils.bhash(str(fbEvent.get('cover')))
 
     # the acual image needs to be hashed because facebook changes the source url at least once a day, which leads to false positives
     if fbEvent.get('cover') != None and fbEvent['cover'].get('source') != None:
         response = requests.get(fbEvent['cover']['source'])
-        newEvent['_cover_bytes_hash'] = bhash(str(response.content))
+        newEvent['_cover_bytes_hash'] = utils.bhash(str(response.content))
