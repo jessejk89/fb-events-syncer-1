@@ -4,7 +4,7 @@ fb_token = "TOKEN_EXAMPLE_CONTENT"
 
 Fill in your own token. For that you need a Facebook developers account. For a token that gives access to the XRNL Facebook, you need to ask the Event Synchronisation Team.
 
-Because the events REST API only accepts requests from 127.0.0.1, the files sync.py and config.py have to be copied to the machine that runs the XRNL website.
+Because the events REST API only accepts requests from 127.0.0.1, the files sync.py, converter.py and config.py have to be copied to the machine that runs the XRNL website.
 For developing purposes, this is inside the docker image. If everything is in order the /var/www/html folder of the website server mounts your local machine's XRNL website folder.
 Open a terminal to the extinction-rebellion-nl_php server and execute:
 
