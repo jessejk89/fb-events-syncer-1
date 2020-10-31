@@ -13,7 +13,7 @@ fb_page_id = "111101134055001"
 #fb_fields = "id, name, category, attending_count, description,  end_time, event_times, place,start_time, cover, owner{name, emails, website}"
 fb_fields = "id, name, description,  end_time, event_times, place, start_time, cover, owner{name, emails, website}"
 
-wp_base_url = "http://localhost:8000/wp-json/events_api/v1"
+wp_base_url = "http://127.0.0.1:8000/wp-json/events_api/v1"
 since_filter = None#"2020-09-30T12:00:00"
 until_filter = None#"2020-09-23T21:00:00"
 
@@ -79,6 +79,12 @@ def getEventsFromFacebook():
             print('End of data')
 
     return events
+
+
+def facebookEventExists(eventId):
+    url = fb_base_url + '/' + str(eventId) + '?fields=id,name&access_token=' + config.fb_token
+    response = requests.get(url)
+    return response.ok
 
 def getEventsFromWebsite():
     url = wp_base_url + '/events'
@@ -400,7 +406,7 @@ def detectCancelledEvents(wpEvents):
         meta = wpEvent.get('meta')
         if meta != None and meta.get('facebook_id'):
             fbEvent = fbEventsByFacebookId.get(meta['facebook_id'])
-            if fbEvent == None:
+            if fbEvent == None and not facebookEventExists(meta['facebook_id']):
                 print('No facebook event for wordpress event with facebook_id ' + meta['facebook_id'])
                 print('deleting event...')
                 wpEvent['post_status'] = 'trash'
@@ -495,7 +501,7 @@ def execute4():
     # print(str(len(dict2)) + ' events counted')
 
     compare(events)
-    #detectCancelledEvents(dict1)
+    detectCancelledEvents(dict1)
 
     print('Importing facebook events done')
 
