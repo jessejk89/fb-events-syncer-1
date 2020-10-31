@@ -13,7 +13,7 @@ fb_page_id = "111101134055001"
 #fb_fields = "id, name, category, attending_count, description,  end_time, event_times, place,start_time, cover, owner{name, emails, website}"
 fb_fields = "id, name, description,  end_time, event_times, place, start_time, cover, owner{name, emails, website}"
 
-wp_base_url = "http://127.0.0.1:8000/wp-json/events_api/v1"
+wp_base_url = "http://127.0.0.1/wp-json/events_api/v1"
 since_filter = None#"2020-09-30T12:00:00"
 until_filter = None#"2020-09-23T21:00:00"
 
@@ -103,7 +103,8 @@ def getEventsFromWebsite():
 
 
     print('Executing website request ' + url)
-    response = requests.get(url, cookies = {'Cookie': config.wp_cookie})
+    #response = requests.get(url, cookies = {'Cookie': config.wp_cookie})
+    response = requests.get(url)
     if response:
         print('Events request successful')
         print(response)
