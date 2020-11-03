@@ -2,6 +2,7 @@ import requests
 from datetime import datetime, timezone, timedelta
 import pytz
 from hashlib import blake2b
+import smtplib, ssl
 
 import config
 import converter
@@ -12,13 +13,20 @@ fb_page_id = "111101134055001"
 #fb_page_id = "200346284174326"
 fb_fields = "id, name, description,  end_time, event_times, place, start_time, cover, owner{name, emails, website}"
 
-wp_base_url = "http://127.0.0.1/wp-json/events_api/v1"
+wp_base_url = "http://127.0.0.1:8000/wp-json/events_api/v1"
 since_filter = None#"2020-09-30T12:00:00"
 until_filter = None#"2020-09-23T21:00:00"
 
 wpEventsByFacebookId = {}
 fbEventsByFacebookId = {}
 
+createdEvents = []
+updatedEvents = []
+deletedEvents = []
+
+# Because the ordering facebook uses is not completely clear, especially when using date filters and recurring events,
+# we need another way to determine which events to check and which not.
+# This function checks if the last end_time that it encounters is not more than 60 days in the past.
 def isExpired(events):
     result = False
     for event in reversed(events):
@@ -51,10 +59,14 @@ def makeFacebookRequest(url):
 
 def getEventsFromFacebook():
     url = fb_base_url + '/' + fb_page_id + '/events?fields=' + fb_fields + '&access_token=' + config.fb_token
-    if since_filter != None:
-        url += ('&since='+ str(int(datetime.strptime(since_filter, '%Y-%m-%dT%H:%M:%S').timestamp())))
-    if until_filter != None:
-        url += ('&until='+ str(int(datetime.strptime(until_filter, '%Y-%m-%dT%H:%M:%S').timestamp())))
+
+    # Disable date filtering for Facebok requests for now because they seem unreliable
+    # start disable
+    #if since_filter != None:
+    #    url += ('&since='+ str(int(datetime.strptime(since_filter, '%Y-%m-%dT%H:%M:%S').timestamp())))
+    #if until_filter != None:
+    #    url += ('&until='+ str(int(datetime.strptime(until_filter, '%Y-%m-%dT%H:%M:%S').timestamp())))
+    # end disable
 
     response = makeFacebookRequest(url)
     json = response.json()
@@ -201,7 +213,8 @@ def createNewEvents(fbEvents):
 def getEvent(id):
     url = wp_base_url + '/events/' + id
     print('Executing website request GET ' + url)
-    response = requests.get(url, cookies = {'Cookie': config.wp_cookie})
+    #response = requests.get(url, cookies = {'Cookie': config.wp_cookie})
+    response = requests.get(url)
     print(response)
     print('Text: ' + response.text)
     return response
@@ -209,7 +222,8 @@ def getEvent(id):
 def postEvent(event):
     url = wp_base_url + '/events'
     print('Executing website request POST ' + url)
-    response = requests.post(url, data = event, cookies = {'Cookie': config.wp_cookie})
+    #response = requests.post(url, data = event, cookies = {'Cookie': config.wp_cookie})
+    response = requests.post(url, data = event)
     print(response)
     print('Text: ' + response.text)
     return response.text
@@ -217,7 +231,8 @@ def postEvent(event):
 def putEvent(event):
     url = wp_base_url + '/events/' + event['id']
     print('Executing website request PUT ' + url)
-    response = requests.put(url, data = event, cookies = {'Cookie': config.wp_cookie})
+    #response = requests.put(url, data = event, cookies = {'Cookie': config.wp_cookie})
+    response = requests.put(url, data = event)
     print(response)
     print('Text: ' + response.text)
     return response.text
@@ -347,6 +362,7 @@ def compare(fbEvents):
             modFields = eventIsUpdated(wpEvent, fbEvent, newEvent)
             if len(modFields) > 0:
                 putEvent(newEvent)
+                updatedEvents.append(wpEvent)
             else:
                 print("No updates detected for main event")
         else:
@@ -367,6 +383,7 @@ def compare(fbEvents):
                         modifiedFields = eventIsUpdated(wpEvent2, fbEvent, newEvent, subEvent, subEventThumbnailId, modifiedFields)
                         if len(modifiedFields) > 0:
                             eventId = putEvent(newEvent)
+                            updatedEvents.append(wpEvent2)
                             if subEventThumbnailId == None:
                                 print("Thumbnail does not exist yet for updated event " + eventId)
                                 serverEvent = getEvent(eventId).json()
@@ -381,6 +398,7 @@ def compare(fbEvents):
                             print("Thumbnail does not exist yet")
                             convertedEvent = createNewSubEvent(subEvent, fbEvent)
                             eventId = postEvent(convertedEvent)
+                            createdEvents.append(convertedEvent)
                             serverEvent = getEvent(eventId).json()
                             subEventThumbnailId = serverEvent.get('meta').get('_thumbnail_id')
                         else:
@@ -390,11 +408,13 @@ def compare(fbEvents):
                             convertedEvent['thumbnail_id'] = subEventThumbnailId
                             #print(str(convertedEvent))
                             postEvent(convertedEvent)
+                            createdEvents.append(convertedEvent)
             else:
                 print('No match and no subevents, creating new event')
                 convertedEvents = createNewEvent(fbEvent)
                 for convertedEvent in convertedEvents:
                     postEvent(convertedEvent)
+                    createdEvents.append(convertedEvent)
 
 def detectCancelledEvents(wpEvents):
     for wpEvent in wpEvents:
@@ -408,11 +428,43 @@ def detectCancelledEvents(wpEvents):
                 newEvent = {'id': wpEvent['id'], 'post_status': 'trash'}
                 print("CANCELLED EVENT FOUND " + wpEvent['title'])
                 putEvent(newEvent)
+                deletedEvents.append(wpEvent)
 
 def writeEventsToFile(events, filename):
     file  = open(filename, 'w', encoding='utf-8')
     file.write(events)
     file.close()
+
+def sendEmail():
+    emailBody = 'Subject: Facebook event synchronization results\n\n'
+
+    emailBody += 'Created events: ' + str(len(createdEvents)) + '\n'
+    for ce in createdEvents:
+        emailBody = emailBody + ('Title: ' + ce.get('title') + '; facebook_id: ' + str(ce.get('facebook_id')) + '\n')
+
+    emailBody += '\n\nUpdated events: ' + str(len(updatedEvents)) + '\n'
+    for ue in updatedEvents:
+        emailBody = emailBody + ('ID: ' + str(ue.get('id')) + '; title: ' + ue.get('title') + '; facebook_id: ' + str(ce.get('facebook_id')) + '\n')
+
+    emailBody += '\n\nTrashed events: ' + str(len(deletedEvents)) + '\n'
+    for de in deletedEvents:
+        emailBody = emailBody + ('ID: ' + str(de.get('id')) + '; title: ' + de.get('title') + '; facebook_id: ' + str(de.get('facebook_id')))
+
+    try:
+        # Create a secure SSL context
+        context = ssl.create_default_context()
+
+        with smtplib.SMTP_SSL("smtp.gmail.com", 465, context=context) as server:
+            server.login('xr.eventsyncer@gmail.com', 'FihnyiSdA8SMP2C')
+            server.sendmail('xr.eventsyncer@gmail.com', 'plyuknhrwqjsqqtpqr@tsyefn.com', emailBody)
+        print("Successfully sent email")
+    except SMTPException as e:
+        print("Error: unable to send email")
+        if hasattr(e, 'message'):
+            print(e.message)
+        else:
+            print(e)
+
 
 def execute4():
     # prepare hash table with website events for easy, fast access
@@ -454,6 +506,7 @@ def execute4():
     compare(events)
     detectCancelledEvents(dict1)
 
+    sendEmail()
     print('Importing facebook events done')
 
 execute4()
