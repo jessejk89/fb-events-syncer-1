@@ -436,6 +436,7 @@ def writeEventsToFile(events, filename):
     file.close()
 
 def sendEmail():
+    print("Sending e-mail to " + config.resultsEmail)
     emailBody = 'Subject: Facebook event synchronization results\n\n'
 
     emailBody += 'Created events: ' + str(len(createdEvents)) + '\n'
@@ -454,9 +455,9 @@ def sendEmail():
         # Create a secure SSL context
         context = ssl.create_default_context()
 
-        with smtplib.SMTP_SSL("smtp.gmail.com", 465, context=context) as server:
-            server.login('xr.eventsyncer@gmail.com', 'FihnyiSdA8SMP2C')
-            server.sendmail('xr.eventsyncer@gmail.com', 'plyuknhrwqjsqqtpqr@tsyefn.com', emailBody)
+        with smtplib.SMTP_SSL(config.emailServer, config.emailPort, context=context) as server:
+            server.login(config.emailSender, config.emailPassword)
+            server.sendmail(config.emailSender, config.resultsEmail, emailBody)
         print("Successfully sent email")
     except SMTPException as e:
         print("Error: unable to send email")
@@ -505,8 +506,9 @@ def execute4():
 
     compare(events)
     detectCancelledEvents(dict1)
-
-    sendEmail()
     print('Importing facebook events done')
+    sendEmail()
+
 
 execute4()
+#sendEmail()
