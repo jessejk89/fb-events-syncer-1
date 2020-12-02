@@ -3,17 +3,16 @@ from datetime import datetime, timezone, timedelta
 import pytz
 from hashlib import blake2b
 import smtplib, ssl
+import sys
 
 import config
 import converter
 import utils
 
 fb_base_url = "https://graph.facebook.com"
-fb_page_id = "111101134055001"
-#fb_page_id = "200346284174326"
+
 fb_fields = "id, name, description,  end_time, event_times, place, start_time, cover, owner{name, emails, website}"
 
-wp_base_url = "http://127.0.0.1:8000/wp-json/events_api/v1"
 since_filter = None#"2020-09-30T12:00:00"
 until_filter = None#"2020-09-23T21:00:00"
 
@@ -58,7 +57,7 @@ def makeFacebookRequest(url):
     return response
 
 def getEventsFromFacebook():
-    url = fb_base_url + '/' + fb_page_id + '/events?fields=' + fb_fields + '&access_token=' + config.fb_token
+    url = fb_base_url + '/' + config.fb_page_id + '/events?fields=' + fb_fields + '&access_token=' + config.fb_token
 
     # Disable date filtering for Facebok requests for now because they seem unreliable
     # start disable
@@ -98,7 +97,7 @@ def facebookEventExists(eventId):
     return response.ok
 
 def getEventsFromWebsite():
-    url = wp_base_url + '/events'
+    url = config.wp_base_url + '/events'
     if since_filter != None:
         sinceTime = datetime.strptime(since_filter, "%Y-%m-%dT%H:%M:%S")
         #start_timestamp = (sinceTime + sinceTime.utcoffset()).timestamp()
@@ -211,7 +210,7 @@ def createNewEvents(fbEvents):
     return newEvents
 
 def getEvent(id):
-    url = wp_base_url + '/events/' + id
+    url = config.wp_base_url + '/events/' + id
     print('Executing website request GET ' + url)
     #response = requests.get(url, cookies = {'Cookie': config.wp_cookie})
     response = requests.get(url)
@@ -220,7 +219,7 @@ def getEvent(id):
     return response
 
 def postEvent(event):
-    url = wp_base_url + '/events'
+    url = config.wp_base_url + '/events'
     print('Executing website request POST ' + url)
     #response = requests.post(url, data = event, cookies = {'Cookie': config.wp_cookie})
     response = requests.post(url, data = event)
@@ -229,7 +228,7 @@ def postEvent(event):
     return response.text
 
 def putEvent(event):
-    url = wp_base_url + '/events/' + event['id']
+    url = config.wp_base_url + '/events/' + event['id']
     print('Executing website request PUT ' + url)
     #response = requests.put(url, data = event, cookies = {'Cookie': config.wp_cookie})
     response = requests.put(url, data = event)
@@ -467,7 +466,8 @@ def sendEmail():
             print(e)
 
 
-def execute4():
+def synchronize():
+    print('[START SYNCHRONISATION] ' + str(datetime.now()))
     # prepare hash table with website events for easy, fast access
     wpEvents = getEventsFromWebsite()
     if wpEvents == None:
@@ -507,8 +507,32 @@ def execute4():
     compare(events)
     detectCancelledEvents(dict1)
     print('Importing facebook events done')
-    sendEmail()
+    try:
+        sendEmail()
+    finally:
+        print('[END OF SYNCHRONISATION] ' + str(datetime.now()))
+        print('\n')
 
+def synchronizeWithFile():
+    original_stdout = sys.stdout # Save a reference to the original standard output
+    with open(config.logFile, 'a') as f:
+        sys.stdout = f # Change the standard output to the file we created.
+        synchronize()
+        #sendEmail()
+        sys.stdout = original_stdout # Reset the standard output to its original value
 
-execute4()
+def test():
+    original_stdout = sys.stdout # Save a reference to the original standard output
+    with open(config.logFile, 'a') as f:
+        sys.stdout = f # Change the standard output to the file we created.
+
+        print('[START TEST] ' + str(datetime.now()))
+        print("Executing test code...")
+        print('[END OF TEST] ' + str(datetime.now()))
+        print('\n')
+
+        #sendEmail()
+        sys.stdout = original_stdout # Reset the standard output to its original value
+
+#execute4()
 #sendEmail()

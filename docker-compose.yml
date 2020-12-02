@@ -1,0 +1,9 @@
+version: "3.8"
+services:
+  script:
+    build: .
+    networks:
+      - xrnl-bridge
+networks:
+  xrnl-bridge:
+    external: true

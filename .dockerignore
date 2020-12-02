@@ -1,0 +1,8 @@
+*
+!start.py
+!sync.py
+!utils.py
+!converter.py
+!prod.config.py
+!logrotate
+!requirements.txt
