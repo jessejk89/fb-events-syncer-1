@@ -3,7 +3,19 @@ services:
   script:
     build: .
     networks:
-      - xrnl-bridge
+      xrnl-bridge:
+        ipv4_address: 172.22.0.100
+    volumes:
+      - logs:/var/log/fb-events-syncer
 networks:
   xrnl-bridge:
     external: true
+
+volumes:
+  logs:
+networks:
+  xrnl-bridge:
+    ipam:
+      driver: default
+      config:
+        - subnet: 172.22.0.0/16
