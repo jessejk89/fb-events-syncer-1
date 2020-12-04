@@ -458,15 +458,24 @@ def sendEmail():
             server.login(config.emailSender, config.emailPassword)
             server.sendmail(config.emailSender, config.resultsEmail, emailBody)
         print("Successfully sent email")
-    except SMTPException as e:
+    except smtplib.SMTPException as e:
         print("Error: unable to send email")
         if hasattr(e, 'message'):
             print(e.message)
         else:
             print(e)
 
+def init():
+    global wpEventsByFacebookId, fbEventsByFacebookId, createdEvents, updatedEvents, deletedEvents
+    wpEventsByFacebookId = {}
+    fbEventsByFacebookId = {}
+
+    createdEvents = []
+    updatedEvents = []
+    deletedEvents = []
 
 def synchronize():
+    init()
     print('[START SYNCHRONISATION] ' + str(datetime.now()))
     # prepare hash table with website events for easy, fast access
     wpEvents = getEventsFromWebsite()
