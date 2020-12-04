@@ -456,7 +456,7 @@ def sendEmail():
 
         with smtplib.SMTP_SSL(config.emailServer, config.emailPort, context=context) as server:
             server.login(config.emailSender, config.emailPassword)
-            server.sendmail(config.emailSender, config.resultsEmail, emailBody)
+            server.sendmail(config.emailSender, config.resultsEmail, emailBody.encode('utf-8'))
         print("Successfully sent email")
     except smtplib.SMTPException as e:
         print("Error: unable to send email")
