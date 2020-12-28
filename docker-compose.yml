@@ -10,8 +10,8 @@ services:
 volumes:
   logs:
 networks:
-  default:
-    external:
-      name: xrnl-bridge
   xrnl-bridge:
-    external: true
+    ipam:
+      driver: default
+      config:
+        - subnet: 172.22.0.0/16
