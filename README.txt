@@ -1,12 +1,24 @@
-Create a file named config.py with the following contents:
+For development
 
-fb_token = "TOKEN_EXAMPLE_CONTENT"
+Create a file named config.py, see example.prod.config, with the following contents
+
+fb_token = ""
+
+fb_page_id = "200346284174326"
+wp_base_url = "http://172.22.0.2/wp-json/events_api/v1"
+
+resultsEmail = 'example@provider.nl'
+
+emailServer = "smtp.gmail.com"
+emailPort = 465
+emailSender = 'xr.eventsyncer@gmail.com'
+emailPassword = ''
+
+logFile = '/var/log/fb-events-syncer/output.log'
+
 
 Fill in your own token. For that you need a Facebook developers account. For a token that gives access to the XRNL Facebook, you need to ask the Event Synchronisation Team.
 
-Because the events REST API only accepts requests from 127.0.0.1, the files sync.py, converter.py and config.py have to be copied to the machine that runs the XRNL website.
-For developing purposes, this is inside the docker image. If everything is in order the /var/www/html folder of the website server mounts your local machine's XRNL website folder.
-Open a terminal to the extinction-rebellion-nl_php server and execute:
 
 >cd /var/www/html/
 
