@@ -3,7 +3,6 @@ from datetime import datetime, timezone, timedelta
 import pytz
 from hashlib import blake2b
 import smtplib, ssl
-import sys
 
 import config
 import converter
@@ -252,14 +251,15 @@ def eventIsUpdated(wpEvent, fbEvent, newEvent, subEvent = None, subEventThumbnai
             modified = True
             modifiedFields.append('name')
             #print('UPDATED: "'+ wpEvent['title'] + ' - ' + fbEvent['name'] + '"')
-            print('UPDATED: "'+ str(meta.get('name_hash')) + '" - "' + str(utils.bhash(fbEvent['name'])) + '"')
+            print('UPDATED: TITLE')
         if 'description' in compareFields and meta.get('description_hash') != utils.bhash(fbEvent['description']):
             converter.parseContent(fbEvent, newEvent)
             #newEvent['content'] = fbEvent['description']
             newEvent['description_hash'] = utils.bhash(fbEvent.get('description'))
             modified = True
             modifiedFields.append('description')
-            print('UPDATED: "' + wpEvent['content'] + ' - ' + fbEvent['description'] + '"')
+            #print('UPDATED: "' + wpEvent['content'].encode('utf-8') + ' - ' + fbEvent['description'].encode('utf-8') + '"')
+            print('UPDATED: DESCRIPTION')
         if subEvent != None:
             if meta.get('start_time_hash') != utils.bhash(subEvent.get('start_time')):
                 startTime = datetime.strptime(subEvent['start_time'], "%Y-%m-%dT%H:%M:%S%z")
@@ -435,7 +435,7 @@ def writeEventsToFile(events, filename):
     file.close()
 
 def sendEmail():
-    print("Sending e-mail to " + config.resultsEmail)
+    print("Sending e-mail to " + str(config.resultsEmail))
     emailBody = 'Subject: Facebook event synchronization results\n\n'
 
     emailBody += 'Created events: ' + str(len(createdEvents)) + '\n'
@@ -476,6 +476,7 @@ def init():
 
 def synchronize():
     init()
+    print('\n')
     print('[START SYNCHRONISATION] ' + str(datetime.now()))
     # prepare hash table with website events for easy, fast access
     wpEvents = getEventsFromWebsite()
@@ -489,7 +490,6 @@ def synchronize():
         if item.get('meta') != None and item['meta'].get('facebook_id') != None:
             fbId = item['meta']['facebook_id']
             wpEventsByFacebookId[fbId] = item
-
 
     # print(str(wpEventsByFacebookId))
     # get facebook events
@@ -522,26 +522,8 @@ def synchronize():
         print('[END OF SYNCHRONISATION] ' + str(datetime.now()))
         print('\n')
 
-def synchronizeWithFile():
-    original_stdout = sys.stdout # Save a reference to the original standard output
-    with open(config.logFile, 'a') as f:
-        sys.stdout = f # Change the standard output to the file we created.
-        synchronize()
-        #sendEmail()
-        sys.stdout = original_stdout # Reset the standard output to its original value
-
 def test():
-    original_stdout = sys.stdout # Save a reference to the original standard output
-    with open(config.logFile, 'a') as f:
-        sys.stdout = f # Change the standard output to the file we created.
-
-        print('[START TEST] ' + str(datetime.now()))
-        print("Executing test code...")
-        print('[END OF TEST] ' + str(datetime.now()))
-        print('\n')
-
-        #sendEmail()
-        sys.stdout = original_stdout # Reset the standard output to its original value
-
-#execute4()
-#sendEmail()
+    print('[START TEST] ' + str(datetime.now()))
+    print("Executing test code...")
+    print('[END OF TEST] ' + str(datetime.now()))
+    print('\n')
