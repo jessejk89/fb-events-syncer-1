@@ -177,10 +177,11 @@ def parseOwnerInformation(event, newEvent):
             newEvent['organizer_url'] = website
 
 def parseContent(event, newEvent):
-    description = event.get('description')
-    #description = re.sub(r'((?:(https?|s?ftp):\/\/)?(?:www\.)?((?:(?:[A-Z0-9][A-Z0-9-]{0,61}[A-Z0-9]\.)+)([A-Z]{2,6})|(?:\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}))(?::(\d{1,5}))?(?:(\/\S+)*))', r'<a href="\1">\1</a>', description)
-    description = re.sub(regex, substituteUrl, description, flags=re.I)
-    newEvent['content'] = description
+    if event.get('description') != None:
+        description = event['description']
+        #description = re.sub(r'((?:(https?|s?ftp):\/\/)?(?:www\.)?((?:(?:[A-Z0-9][A-Z0-9-]{0,61}[A-Z0-9]\.)+)([A-Z]{2,6})|(?:\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}))(?::(\d{1,5}))?(?:(\/\S+)*))', r'<a href="\1">\1</a>', description)
+        description = re.sub(regex, substituteUrl, description, flags=re.I)
+        newEvent['content'] = description
 
 # Hashes can be used to compare events and find out whether they have changed or not.
 # It is important to only compare the original facebook events because wordpress events can be changed manually.
