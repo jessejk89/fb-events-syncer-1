@@ -1,7 +1,7 @@
 fb_token = ""
 
 fb_page_id = "200346284174326"
-wp_base_url = "http://172.22.0.101/wp-json/events_api/v1"
+wp_base_url = "https://development.extinctionrebellion.nl/wp-json/events_api/v1"
 intervalHours = 4
 
 resultsEmail = ['example1@provider.nl', 'example2@provider.be']
