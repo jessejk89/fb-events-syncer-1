@@ -23,7 +23,8 @@ def synchronizeWithFile():
         f.close()
 
 schedule.every(config.intervalHours).hours.do(synchronizeWithFile)
-#schedule.every(config.intervalHours).minutes.do(synchronizeWithFile)
+
+synchronizeWithFile()
 
 while True:
     schedule.run_pending()

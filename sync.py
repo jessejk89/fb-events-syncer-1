@@ -156,8 +156,7 @@ def createNewEvent(event):
     newEvents = []
     newEvent = {
         'facebook_id': event['id'],
-        'title': event['name'],
-        'content': event['description']
+        'title': event['name']
     }
 
     if event.get('cover') != None:
@@ -252,7 +251,7 @@ def eventIsUpdated(wpEvent, fbEvent, newEvent, subEvent = None, subEventThumbnai
             modifiedFields.append('name')
             #print('UPDATED: "'+ wpEvent['title'] + ' - ' + fbEvent['name'] + '"')
             print('UPDATED: TITLE')
-        if 'description' in compareFields and meta.get('description_hash') != utils.bhash(fbEvent['description']):
+        if 'description' in compareFields and fbEvent.get('description') != None and meta.get('description_hash') != utils.bhash(fbEvent['description']):
             converter.parseContent(fbEvent, newEvent)
             #newEvent['content'] = fbEvent['description']
             newEvent['description_hash'] = utils.bhash(fbEvent.get('description'))
