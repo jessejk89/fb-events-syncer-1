@@ -24,14 +24,14 @@ deletedEvents = []
 
 # Because the ordering facebook uses is not completely clear, especially when using date filters and recurring events,
 # we need another way to determine which events to check and which not.
-# This function checks if the last end_time that it encounters is not more than 60 days in the past.
+# This function checks if the last end_time that it encounters is not more than 7 days in the past.
 def isExpired(events):
     result = False
     for event in reversed(events):
         strEndTime = event.get('end_time')
         if strEndTime != None:
             endTime = datetime.strptime(strEndTime, "%Y-%m-%dT%H:%M:%S%z")
-            if endTime < (datetime.now(timezone.utc) - timedelta(days=60)):
+            if endTime < (datetime.now(timezone.utc) - timedelta(days=7)):
                 result = True
                 break
             else:
