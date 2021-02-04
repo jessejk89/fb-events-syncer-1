@@ -7,9 +7,15 @@ intervalHours = 4
 resultsEmail = ['example1@provider.nl', 'example2@provider.be']
 #resultsEmail = 'example@provider.com'
 
+emailResult = False
 emailServer = "smtp.gmail.com"
 emailPort = 465
 emailSender = 'xr.eventsyncer@gmail.com'
 emailPassword = ''
+
+postInMattermost = True
+mattermostBaseUrl = 'https://organise.earth/'
+mattermostChannelId = 't16jxzgts78j3qqxrtrs79ps7a'
+mattermostToken = ''
 
 logFile = '/var/log/fb-events-syncer/output.log'

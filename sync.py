@@ -24,14 +24,14 @@ deletedEvents = []
 
 # Because the ordering facebook uses is not completely clear, especially when using date filters and recurring events,
 # we need another way to determine which events to check and which not.
-# This function checks if the last end_time that it encounters is not more than 60 days in the past.
+# This function checks if the last end_time that it encounters is not more than 7 days in the past.
 def isExpired(events):
     result = False
     for event in reversed(events):
         strEndTime = event.get('end_time')
         if strEndTime != None:
             endTime = datetime.strptime(strEndTime, "%Y-%m-%dT%H:%M:%S%z")
-            if endTime < (datetime.now(timezone.utc) - timedelta(days=60)):
+            if endTime < (datetime.now(timezone.utc) - timedelta(days=7)):
                 result = True
                 break
             else:
@@ -93,6 +93,12 @@ def getEventsFromFacebook():
 def facebookEventExists(eventId):
     url = fb_base_url + '/' + str(eventId) + '?fields=id,name&access_token=' + config.fb_token
     response = requests.get(url)
+
+    json = response.json()
+    error = json.get('error')
+    # Bad request 400 with error code 100 usually indicates that the event does not exist
+    if (not response.ok) and error != None and error.get('code') != '100' and error.get('code') != 100:
+        raise Exception(str(error))
     return response.ok
 
 def getEventsFromWebsite():
@@ -433,8 +439,7 @@ def writeEventsToFile(events, filename):
     file.write(events)
     file.close()
 
-def sendEmail():
-    print("Sending e-mail to " + str(config.resultsEmail))
+def createMessageBody():
     emailBody = 'Subject: Facebook event synchronization results\n\n'
 
     emailBody += 'Created events: ' + str(len(createdEvents)) + '\n'
@@ -447,7 +452,12 @@ def sendEmail():
 
     emailBody += '\n\nTrashed events: ' + str(len(deletedEvents)) + '\n'
     for de in deletedEvents:
-        emailBody = emailBody + ('ID: ' + str(de.get('id')) + '; title: ' + de.get('title') + '; facebook_id: ' + str(de.get('facebook_id')))
+        emailBody = emailBody + ('ID: ' + str(de.get('id')) + '; title: ' + de.get('title') + '; facebook_id: ' + str(de.get('facebook_id')) + '\n')
+    return emailBody
+
+def sendEmail():
+    print("Sending e-mail to " + str(config.resultsEmail))
+    emailBody = createMessageBody()
 
     try:
         # Create a secure SSL context
@@ -463,6 +473,17 @@ def sendEmail():
             print(e.message)
         else:
             print(e)
+
+def postToMattermostChannel(channelId, message):
+    data = {"channel_id": channelId, "message": message}
+    headers = {'Authorization': config.mattermostToken}
+    response = requests.post(config.mattermostBaseUrl + 'api/v4/posts', headers=headers, json=data)
+    return response
+
+def postInMattermost():
+    print("Posting message in Mattermost to " + str(config.mattermostChannelId))
+    emailBody = createMessageBody() + '\n```----```\n'
+    postToMattermostChannel(config.mattermostChannelId, emailBody)
 
 def init():
     global wpEventsByFacebookId, fbEventsByFacebookId, createdEvents, updatedEvents, deletedEvents
@@ -513,10 +534,18 @@ def synchronize():
     # print(str(len(dict2)) + ' events counted')
 
     compare(events)
-    detectCancelledEvents(dict1)
+    try:
+        detectCancelledEvents(dict1)
+    except BaseException as e:
+        print('An error occured when detecting cancelled events')
+        print(e)
+
     print('Importing facebook events done')
     try:
-        sendEmail()
+        if config.emailResult:
+            sendEmail()
+        if config.postInMattermost:
+            postInMattermost()
     finally:
         print('[END OF SYNCHRONISATION] ' + str(datetime.now()))
         print('\n')
