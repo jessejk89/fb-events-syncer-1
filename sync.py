@@ -448,7 +448,7 @@ def createMessageBody():
 
     emailBody += '\n\nUpdated events: ' + str(len(updatedEvents)) + '\n'
     for ue in updatedEvents:
-        emailBody = emailBody + ('ID: ' + str(ue.get('id')) + '; title: ' + ue.get('title') + '; facebook_id: ' + str(ce.get('facebook_id')) + '\n')
+        emailBody = emailBody + ('ID: ' + str(ue.get('id')) + '; title: ' + ue.get('title') + '; facebook_id: ' + str(ue.get('facebook_id')) + '\n')
 
     emailBody += '\n\nTrashed events: ' + str(len(deletedEvents)) + '\n'
     for de in deletedEvents:
