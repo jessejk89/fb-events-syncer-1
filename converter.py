@@ -157,6 +157,12 @@ def parseLocationInformation(event, newEvent):
             elif len(split) == 1:
                 newEvent['venue_name'] = split[0].strip()
 
+    # If an event is online venue_name and venue_address must be set to 'Online' for the filter on the website to work
+    # Unfortunately, this might cause important values to be overwritten in some cases
+    if event.get('is_online') and event['is_online'] == True:
+        newEvent['venue_name'] = 'Online'
+        newEvent['venue_address'] = 'Online'
+
 
 def parseOwnerInformation(event, newEvent):
 
@@ -175,6 +181,11 @@ def parseOwnerInformation(event, newEvent):
         website = owner.get('website')
         if website != None:
             newEvent['organizer_url'] = website
+
+        if name == 'Extinction Rebellion NL':
+            # overwrites the value set above
+            newEvent['organizer_email'] = 'info@extinctionrebellion.nl'
+
 
 def parseContent(event, newEvent):
     if event.get('description') != None:

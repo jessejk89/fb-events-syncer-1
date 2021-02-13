@@ -10,7 +10,7 @@ import utils
 
 fb_base_url = "https://graph.facebook.com"
 
-fb_fields = "id, name, description,  end_time, event_times, place, start_time, cover, owner{name, emails, website}"
+fb_fields = "id, name, description,  end_time, event_times, place, start_time, cover, owner{name, emails, website}, is_online"
 
 since_filter = None#"2020-09-30T12:00:00"
 until_filter = None#"2020-09-23T21:00:00"
