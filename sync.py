@@ -366,6 +366,7 @@ def compare(fbEvents):
             modFields = eventIsUpdated(wpEvent, fbEvent, newEvent)
             if len(modFields) > 0:
                 putEvent(newEvent)
+                wpEvent['facebook_id'] = fbEvent['id']
                 updatedEvents.append(wpEvent)
             else:
                 print("No updates detected for main event")
@@ -387,6 +388,7 @@ def compare(fbEvents):
                         modifiedFields = eventIsUpdated(wpEvent2, fbEvent, newEvent, subEvent, subEventThumbnailId, modifiedFields)
                         if len(modifiedFields) > 0:
                             eventId = putEvent(newEvent)
+                            wpEvent2['facebook_id'] = subEvent['id']
                             updatedEvents.append(wpEvent2)
                             if subEventThumbnailId == None:
                                 print("Thumbnail does not exist yet for updated event " + eventId)
@@ -402,6 +404,7 @@ def compare(fbEvents):
                             print("Thumbnail does not exist yet")
                             convertedEvent = createNewSubEvent(subEvent, fbEvent)
                             eventId = postEvent(convertedEvent)
+                            convertedEvent['wordpress_id'] = eventId
                             createdEvents.append(convertedEvent)
                             serverEvent = getEvent(eventId).json()
                             subEventThumbnailId = serverEvent.get('meta').get('_thumbnail_id')
@@ -411,13 +414,15 @@ def compare(fbEvents):
                             convertedEvent.pop('picture_url', None)
                             convertedEvent['thumbnail_id'] = subEventThumbnailId
                             #print(str(convertedEvent))
-                            postEvent(convertedEvent)
+                            wordpressId = postEvent(convertedEvent)
+                            convertedEvent['wordpress_id'] = wordpressId
                             createdEvents.append(convertedEvent)
             else:
                 print('No match and no subevents, creating new event')
                 convertedEvents = createNewEvent(fbEvent)
                 for convertedEvent in convertedEvents:
-                    postEvent(convertedEvent)
+                    wordpressId = postEvent(convertedEvent)
+                    convertedEvent['wordpress_id'] = wordpressId
                     createdEvents.append(convertedEvent)
 
 def detectCancelledEvents(wpEvents):
@@ -432,6 +437,7 @@ def detectCancelledEvents(wpEvents):
                 newEvent = {'id': wpEvent['id'], 'post_status': 'trash'}
                 print("CANCELLED EVENT FOUND " + wpEvent['title'])
                 putEvent(newEvent)
+                wpEvent['facebook_id'] = meta['facebook_id']
                 deletedEvents.append(wpEvent)
 
 def writeEventsToFile(events, filename):
@@ -440,24 +446,32 @@ def writeEventsToFile(events, filename):
     file.close()
 
 def createMessageBody():
-    emailBody = 'Subject: Facebook event synchronization results\n\n'
+    emailBody = ''
 
-    emailBody += 'Created events: ' + str(len(createdEvents)) + '\n'
-    for ce in createdEvents:
-        emailBody = emailBody + ('Title: ' + ce.get('title') + '; facebook_id: ' + str(ce.get('facebook_id')) + '\n')
+    if len(createdEvents) == 0 and len(updatedEvents) == 0 and len(deletedEvents) == 0:
+        emailBody = 'No changes were detected during event synchronisation'
+    else:
+        emailBody += 'Created events: ' + str(len(createdEvents)) + '\n'
+        for ce in createdEvents:
+            url = config.wp_base_url.replace('wp-json/events_api/v1', 'wp/wp-admin/post.php?post=' + str(ce.get('wordpress_id')) + '&action=edit&lang=nl')
+            emailBody = emailBody + ('* ' + ce.get('title') + ' | Wordpress: [' + str(ce.get('wordpress_id')) + '](' + url + ') | Facebook: [' + str(ce.get('facebook_id')) + '](https://www.facebook.com/events/' + str(ce.get('facebook_id')) + ')\n')
 
-    emailBody += '\n\nUpdated events: ' + str(len(updatedEvents)) + '\n'
-    for ue in updatedEvents:
-        emailBody = emailBody + ('ID: ' + str(ue.get('id')) + '; title: ' + ue.get('title') + '; facebook_id: ' + str(ue.get('facebook_id')) + '\n')
+        emailBody += '\n\nUpdated events: ' + str(len(updatedEvents)) + '\n'
+        for ue in updatedEvents:
+            url = config.wp_base_url.replace('wp-json/events_api/v1', 'wp/wp-admin/post.php?post=' + str(ue.get('id')) + '&action=edit&lang=nl')
+            emailBody = emailBody + ('* ' + ue.get('title') + '| Wordpress: [' + str(ue.get('id')) + ' ](' + url + ') | Facebook: [' + str(ue.get('facebook_id')) + '](https://www.facebook.com/events/' + str(ue.get('facebook_id')) + ')\n')
 
-    emailBody += '\n\nTrashed events: ' + str(len(deletedEvents)) + '\n'
-    for de in deletedEvents:
-        emailBody = emailBody + ('ID: ' + str(de.get('id')) + '; title: ' + de.get('title') + '; facebook_id: ' + str(de.get('facebook_id')) + '\n')
+        emailBody += '\n\nTrashed events: ' + str(len(deletedEvents)) + '\n'
+        for de in deletedEvents:
+            url = config.wp_base_url.replace('wp-json/events_api/v1', 'wp/wp-admin/post.php?post=' + str(de.get('id')) + '&action=edit&lang=nl')
+            emailBody = emailBody + ('* ' + de.get('title') + ' | Wordpress: [' + str(de.get('id')) + ' ](' + url + ') | Facebook: [' + str(de.get('facebook_id')) + '](https://www.facebook.com/events/' + str(de.get('facebook_id')) + ')\n')
+
     return emailBody
 
 def sendEmail():
     print("Sending e-mail to " + str(config.resultsEmail))
-    emailBody = createMessageBody()
+    emailBody = 'Subject: Facebook event synchronization results\n\n'
+    emailBody += createMessageBody()
 
     try:
         # Create a secure SSL context
@@ -482,7 +496,7 @@ def postToMattermostChannel(channelId, message):
 
 def postInMattermost():
     print("Posting message in Mattermost to " + str(config.mattermostChannelId))
-    emailBody = createMessageBody() + '\n```----```\n'
+    emailBody = createMessageBody()# + '\n```----```\n'
     postToMattermostChannel(config.mattermostChannelId, emailBody)
 
 def init():
