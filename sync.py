@@ -459,7 +459,7 @@ def createMessageBody():
         emailBody += '\n\nUpdated events: ' + str(len(updatedEvents)) + '\n'
         for ue in updatedEvents:
             url = config.wp_base_url.replace('wp-json/events_api/v1', 'wp/wp-admin/post.php?post=' + str(ue.get('id')) + '&action=edit&lang=nl')
-            emailBody = emailBody + ('* ' + ue.get('title') + '| Wordpress: [' + str(ue.get('id')) + ' ](' + url + ') | Facebook: [' + str(ue.get('facebook_id')) + '](https://www.facebook.com/events/' + str(ue.get('facebook_id')) + ')\n')
+            emailBody = emailBody + ('* ' + ue.get('title') + ' | Wordpress: [' + str(ue.get('id')) + ' ](' + url + ') | Facebook: [' + str(ue.get('facebook_id')) + '](https://www.facebook.com/events/' + str(ue.get('facebook_id')) + ')\n')
 
         emailBody += '\n\nTrashed events: ' + str(len(deletedEvents)) + '\n'
         for de in deletedEvents:
