@@ -36,11 +36,14 @@ regex += r'(?:(?:\/\S+)*[A-Z0-9/])?'
 regex += r')'
 
 def substituteUrl(m):
+    result = '<a href="' + m.group(0) + '">' + m.group(0) + '</a>'
+
     if m.group('email_prefix') != None: # match has an email prefix
-            return '<a href="mailto: ' + m.group(0) + '">' + m.group(0) + '</a>'
+        result = '<a href="mailto: ' + m.group(0) + '">' + m.group(0) + '</a>'
     elif m.group('protocol') == None:
-        return '<a href="http://' + m.group(0) + '">' + m.group(0) + '</a>'
-    return '<a href="' + m.group(0) + '">' + m.group(0) + '</a>'
+        result =  '<a href="http://' + m.group(0) + '">' + m.group(0) + '</a>'
+
+    return result
 
 def parseCategoryInformation(event, newEvent):
     # make an educated guess about the category: review is needed by a human
@@ -157,6 +160,12 @@ def parseLocationInformation(event, newEvent):
             elif len(split) == 1:
                 newEvent['venue_name'] = split[0].strip()
 
+    # If an event is online venue_name and venue_address must be set to 'Online' for the filter on the website to work
+    # Unfortunately, this might cause important values to be overwritten in some cases
+    if event.get('is_online') and event['is_online'] == True:
+        newEvent['venue_name'] = 'Online'
+        newEvent['venue_address'] = 'Online'
+
 
 def parseOwnerInformation(event, newEvent):
 
@@ -176,9 +185,15 @@ def parseOwnerInformation(event, newEvent):
         if website != None:
             newEvent['organizer_url'] = website
 
+        if name == 'Extinction Rebellion NL':
+            # overwrites the value set above
+            newEvent['organizer_email'] = 'info@extinctionrebellion.nl'
+
+
 def parseContent(event, newEvent):
     if event.get('description') != None:
         description = event['description']
+        description = re.sub('[?&]fbclid=\S*', '', description, flags=re.I)
         #description = re.sub(r'((?:(https?|s?ftp):\/\/)?(?:www\.)?((?:(?:[A-Z0-9][A-Z0-9-]{0,61}[A-Z0-9]\.)+)([A-Z]{2,6})|(?:\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}))(?::(\d{1,5}))?(?:(\/\S+)*))', r'<a href="\1">\1</a>', description)
         description = re.sub(regex, substituteUrl, description, flags=re.I)
         newEvent['content'] = description
