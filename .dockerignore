@@ -4,5 +4,6 @@
 !utils.py
 !converter.py
 !prod.config.py
+!prod.db.py
 !logrotate
 !requirements.txt

@@ -7,6 +7,7 @@ import smtplib, ssl
 import config
 import converter
 import utils
+import db
 
 fb_base_url = "https://graph.facebook.com"
 
@@ -499,6 +500,68 @@ def postInMattermost():
     emailBody = createMessageBody()# + '\n```----```\n'
     postToMattermostChannel(config.mattermostChannelId, emailBody)
 
+def postInMattermostSeperate():
+    print("Posting messages in Mattermost to " + str(config.mattermostChannelId))
+    generalMessage = ''
+    changesDetected = False
+
+    if len(createdEvents) == 0 and len(updatedEvents) == 0 and len(deletedEvents) == 0:
+        generalMessage = 'Event synchronization round complete: no changes detected\n'
+    else:
+        changesDetected = True
+        generalMessage = 'Event synchronization round complete\n'
+        generalMessage += 'Created events: ' + str(len(createdEvents)) + '\n'
+        for ce in createdEvents:
+            url = config.wp_base_url.replace('wp-json/events_api/v1', 'wp/wp-admin/post.php?post=' + str(ce.get('wordpress_id')) + '&action=edit&lang=nl')
+            text = 'A new event was created' + '\n'
+            organizer = ce.get('organizer_name')
+            syncerString = formatSyncers(organizer)
+            if organizer != None:
+                text = syncerString + ' A new event was created organized by ' + organizer + '\n'
+
+            text += ('* ' + ce.get('title') + ' | Wordpress: [' + str(ce.get('wordpress_id')) + '](' + url + ') | Facebook: [' + str(ce.get('facebook_id')) + '](https://www.facebook.com/events/' + str(ce.get('facebook_id')) + ')\n')
+            postToMattermostChannel(config.mattermostChannelId, text)
+
+        generalMessage += '\n\nUpdated events: ' + str(len(updatedEvents)) + '\n'
+        for ue in updatedEvents:
+            url = config.wp_base_url.replace('wp-json/events_api/v1', 'wp/wp-admin/post.php?post=' + str(ue.get('id')) + '&action=edit&lang=nl')
+            text = syncerString + 'An existing event was updated \n'
+            organizer = ue.get('meta').get('organizer_name')
+            syncerString = formatSyncers(organizer)
+            if organizer != None:
+                text = syncerString + ' An existing event organized by ' + organizer + ' was updated \n'
+
+            text = text + ('* ' + ue.get('title') + ' | Wordpress: [' + str(ue.get('id')) + ' ](' + url + ') | Facebook: [' + str(ue.get('facebook_id')) + '](https://www.facebook.com/events/' + str(ue.get('facebook_id')) + ')\n')
+            postToMattermostChannel(config.mattermostChannelId, text)
+
+        generalMessage += '\n\nTrashed events: ' + str(len(deletedEvents)) + '\n'
+        for de in deletedEvents:
+            url = config.wp_base_url.replace('wp-json/events_api/v1', 'wp/wp-admin/post.php?post=' + str(de.get('id')) + '&action=edit&lang=nl')
+            text = 'An existing event was trashed\n'
+            organizer = de.get('meta').get('organizer_name')
+            syncerString = formatSyncers(organizer)
+            if organizer != None:
+                text = syncerString + ' An existing event organized by ' + organizer + ' was trashed \n'
+            text = text + ('* ' + de.get('title') + ' | Wordpress: [' + str(de.get('id')) + ' ](' + url + ') | Facebook: [' + str(de.get('facebook_id')) + '](https://www.facebook.com/events/' + str(de.get('facebook_id')) + ')\n')
+            postToMattermostChannel(config.mattermostChannelId, text)
+
+    if changesDetected:
+        postToMattermostChannel(config.mattermostChannelId, '***')
+    postToMattermostChannel(config.mattermostChannelId, generalMessage)
+
+def formatSyncers(organizer):
+    syncerString = ''
+    if organizer != None:
+        syncers = db.syncersByOrganizerName.get(organizer)
+        if syncers != None:
+            for s in syncers:
+                syncerString += ('@' + s + ' ')
+        else:
+            syncerString = ''
+            for s in db.defaultSyncers:
+                syncerString += ('@' + s + ' ')
+    return syncerString
+
 def init():
     global wpEventsByFacebookId, fbEventsByFacebookId, createdEvents, updatedEvents, deletedEvents
     wpEventsByFacebookId = {}
@@ -559,7 +622,7 @@ def synchronize():
         if config.emailResult:
             sendEmail()
         if config.postInMattermost:
-            postInMattermost()
+            postInMattermostSeperate()
     finally:
         print('[END OF SYNCHRONISATION] ' + str(datetime.now()))
         print('\n')
