@@ -525,7 +525,7 @@ def postInMattermostSeperate():
         generalMessage += '\n\nUpdated events: ' + str(len(updatedEvents)) + '\n'
         for ue in updatedEvents:
             url = config.wp_base_url.replace('wp-json/events_api/v1', 'wp/wp-admin/post.php?post=' + str(ue.get('id')) + '&action=edit&lang=nl')
-            text = syncerString + 'An existing event was updated \n'
+            text = 'An existing event was updated \n'
             organizer = ue.get('meta').get('organizer_name')
             syncerString = formatSyncers(organizer)
             if organizer != None:
