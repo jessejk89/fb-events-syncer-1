@@ -18,6 +18,7 @@ until_filter = None#"2020-09-23T21:00:00"
 
 wpEventsByFacebookId = {}
 fbEventsByFacebookId = {}
+administrationByFacebookId = {}
 
 createdEvents = []
 updatedEvents = []
@@ -138,18 +139,26 @@ def createNewSubEvent(event, parentEvent):
         'content': parentEvent['description']
     }
 
+    administrationByFacebookId[event['id']] = {}
+
     if parentEvent.get('cover') != None:
         newEvent['picture_url'] = parentEvent['cover']['source']
 
-    startTime = datetime.strptime(event.get('start_time'), "%Y-%m-%dT%H:%M:%S%z")
+    strStartTime = event.get('start_time')
+    startTime = datetime.strptime(strStartTime, "%Y-%m-%dT%H:%M:%S%z")
+    administrationByFacebookId[event['id']]['start_time_object'] = startTime
     newEvent['start_date'] = startTime.strftime("%Y-%m-%d %H:%M")
 
     strEndTime = event.get('end_time')
     if strEndTime != None:
         endTime = datetime.strptime(strEndTime, "%Y-%m-%dT%H:%M:%S%z")
+        administrationByFacebookId[event['id']]['end_time_object'] = endTime
         newEvent['end_date'] = endTime.strftime("%Y-%m-%d %H:%M")
     else:
-        newEvent['end_date'] = None
+        #newEvent['end_date'] = None
+        # make end_date equal start_date to prevent wordpress from falling back to current time
+        endTime = datetime.strptime(strStartTime, "%Y-%m-%dT%H:%M:%S%z")
+        newEvent['end_date'] = endTime.strftime("%Y-%m-%d %H:%M")
 
     converter.parseContent(parentEvent, newEvent)
     converter.parseCategoryInformation(parentEvent, newEvent)
@@ -159,6 +168,7 @@ def createNewSubEvent(event, parentEvent):
 
     return newEvent
 
+# This method probably never gets called
 def createNewEvent(event):
     newEvents = []
     newEvent = {
@@ -166,12 +176,16 @@ def createNewEvent(event):
         'title': event['name']
     }
 
+    administrationByFacebookId[event['id']] = {}
+
     if event.get('cover') != None:
         newEvent['picture_url'] = event['cover']['source']
 
     if event.get('event_times') != None: # we are dealing with a recurring event with multiple start- and endtimes and it's own facebook id
         for subEvent in event['event_times']:
-            startTime = datetime.strptime(subEvent.get('start_time'), "%Y-%m-%dT%H:%M:%S%z")
+            strStartTime = subEvent.get('start_time')
+            startTime = datetime.strptime(strStartTime, "%Y-%m-%dT%H:%M:%S%z")
+            administrationByFacebookId[event['id']]['start_time_object'] = startTime
 
             newSubEvent = newEvent.copy()
             newSubEvent['facebook_id'] = subEvent['id']
@@ -180,24 +194,36 @@ def createNewEvent(event):
             strEndTime = subEvent.get('end_time')
             if strEndTime != None:
                 endTime = datetime.strptime(strEndTime, "%Y-%m-%dT%H:%M:%S%z")
+                administrationByFacebookId[event['id']]['end_time_object'] = endTime
                 newSubEvent['end_date'] = endTime.strftime("%Y-%m-%d %H:%M")
             else:
-                newEvent['end_date'] = None
+                #newEvent['end_date'] = None
+                # make end_date equal start_date to prevent wordpress from falling back to current time
+                endTime = datetime.strptime(strStartTime, "%Y-%m-%dT%H:%M:%S%z")
+                newSubEvent['end_date'] = endTime.strftime("%Y-%m-%d %H:%M")
 
             newEvents.append(newSubEvent)
     else: # this is single event with only one start- and endtime
-        startTime = datetime.strptime(event.get('start_time'), "%Y-%m-%dT%H:%M:%S%z")
+        strStartTime = event.get('start_time')
+        startTime = datetime.strptime(strStartTime, "%Y-%m-%dT%H:%M:%S%z")
+        administrationByFacebookId[event['id']]['start_time_object'] = startTime
         newEvent['start_date'] = startTime.strftime("%Y-%m-%d %H:%M")
 
         strEndTime = event.get('end_time')
         if strEndTime != None:
             endTime = datetime.strptime(strEndTime, "%Y-%m-%dT%H:%M:%S%z")
+            administrationByFacebookId[event['id']]['end_time_object'] = endTime
             newEvent['end_date'] = endTime.strftime("%Y-%m-%d %H:%M")
         else:
-            newEvent['end_date'] = None
+            #newEvent['end_date'] = None
+            # make end_date equal start_date to prevent wordpress from falling back to current time
+            endTime = datetime.strptime(strStartTime, "%Y-%m-%dT%H:%M:%S%z")
+            newEvent['end_date'] = endTime.strftime("%Y-%m-%d %H:%M")
 
         newEvents.append(newEvent)
 
+    # TODO: the code below should be above the newEvent.copy() statement so that all information is copied
+    # Fortunately, this method appears not be executed for recurring events so there is no harm
     converter.parseContent(event, newEvent)
     converter.parseCategoryInformation(event, newEvent)
     converter.parseLocationInformation(event, newEvent)
@@ -267,15 +293,18 @@ def eventIsUpdated(wpEvent, fbEvent, newEvent, subEvent = None, subEventThumbnai
             #print('UPDATED: "' + wpEvent['content'].encode('utf-8') + ' - ' + fbEvent['description'].encode('utf-8') + '"')
             print('UPDATED: DESCRIPTION')
         if subEvent != None:
+            startTimeModified = False
             if meta.get('start_time_hash') != utils.bhash(subEvent.get('start_time')):
                 startTime = datetime.strptime(subEvent['start_time'], "%Y-%m-%dT%H:%M:%S%z")
                 newEvent['start_date'] = startTime.strftime("%Y-%m-%d %H:%M")
                 newEvent['start_time_hash'] = utils.bhash(subEvent.get('start_time'))
                 modified = True
+                startTimeModified = True
                 modifiedFields.append('start_time')
                 print('UPDATED: "' + wpEvent['meta']['event_start_date'] + ' - ' + str(startTime) + '"')
             strEndTime = subEvent.get('end_time')
-            if meta.get('end_time_hash') != utils.bhash(strEndTime):
+            # When start_date is modified and end_date is None, end_date needs a correction
+            if meta.get('end_time_hash') != utils.bhash(strEndTime) or (startTimeModified and strEndTime == None):
                 if strEndTime != None:
                     endTime = datetime.strptime(strEndTime, "%Y-%m-%dT%H:%M:%S%z")
                     newEvent['end_date'] = endTime.strftime("%Y-%m-%d %H:%M")
@@ -284,20 +313,26 @@ def eventIsUpdated(wpEvent, fbEvent, newEvent, subEvent = None, subEventThumbnai
                     modifiedFields.append('end_time')
                     print('UPDATED: "' + wpEvent['meta']['event_end_date'] + ' - ' + str(endTime) + '"')
                 else:
-                    newEvent['end_date'] = None
+                    #newEvent['end_date'] = None
+                    # make end_date equal start_date to prevent wordpress from falling back to current time
+                    endTime = datetime.strptime(subEvent['start_time'], "%Y-%m-%dT%H:%M:%S%z")
+                    newEvent['end_date'] = endTime.strftime("%Y-%m-%d %H:%M")
                     newEvent['end_time_hash'] = None
                     modified = True
                     modifiedFields.append('end_time')
         else:
+            startTimeModified = False
             if meta.get('start_time_hash') != utils.bhash(fbEvent.get('start_time')):
                 startTime = datetime.strptime(fbEvent.get('start_time'), "%Y-%m-%dT%H:%M:%S%z")
                 newEvent['start_date'] = startTime.strftime("%Y-%m-%d %H:%M")
                 newEvent['start_time_hash'] = utils.bhash(fbEvent.get('start_time'))
                 modified = True
+                startTimeModified = True
                 modifiedFields.append('start_time')
                 print('UPDATED: "' + wpEvent['meta']['event_start_date'] + ' - ' + str(startTime) + '"')
             strEndTime = fbEvent.get('end_time')
-            if meta.get('end_time_hash') != utils.bhash(strEndTime):
+            # When start_date is modified and end_date is None, end_date needs a correction
+            if meta.get('end_time_hash') != utils.bhash(strEndTime) or (startTimeModified and strEndTime == None):
                 if strEndTime != None:
                     endTime = datetime.strptime(strEndTime, "%Y-%m-%dT%H:%M:%S%z")
                     newEvent['end_date'] = endTime.strftime("%Y-%m-%d %H:%M")
@@ -306,7 +341,10 @@ def eventIsUpdated(wpEvent, fbEvent, newEvent, subEvent = None, subEventThumbnai
                     modifiedFields.append('end_time')
                     print('UPDATED: "' + wpEvent['meta']['event_end_date'] + ' - ' + str(endTime) + '"')
                 else:
-                    newEvent['end_date'] = None
+                    #newEvent['end_date'] = None
+                    # make end_date equal start_date to prevent wordpress from falling back to current time
+                    endTime = datetime.strptime(fbEvent['start_time'], "%Y-%m-%dT%H:%M:%S%z")
+                    newEvent['end_date'] = endTime.strftime("%Y-%m-%d %H:%M")
                     newEvent['end_time_hash'] = None
                     modified = True
                     modifiedFields.append('end_time')
@@ -515,7 +553,15 @@ def postInMattermostSeperate():
             url = config.wp_base_url.replace('wp-json/events_api/v1', 'wp/wp-admin/post.php?post=' + str(ce.get('wordpress_id')) + '&action=edit&lang=nl')
             text = 'A new event was created' + '\n'
             organizer = ce.get('organizer_name')
-            syncerString = formatSyncers(organizer)
+
+            syncerString = ''
+            endDateObject = administrationByFacebookId[ce.get('facebook_id')].get('end_time_object')
+            startDateObject = administrationByFacebookId[ce.get('facebook_id')].get('start_time_object')
+
+            # check if event has passed; if yes then there is no need to notify users with a tag
+            if (endDateObject != None and endDateObject > datetime.now(timezone.utc)) or (endDateObject == None and startDateObject > (datetime.now(timezone.utc) - timedelta(days=1))):
+                syncerString = formatSyncers(organizer)
+
             if organizer != None:
                 text = syncerString + ' A new event was created organized by ' + organizer + '\n'
 
@@ -527,7 +573,15 @@ def postInMattermostSeperate():
             url = config.wp_base_url.replace('wp-json/events_api/v1', 'wp/wp-admin/post.php?post=' + str(ue.get('id')) + '&action=edit&lang=nl')
             text = 'An existing event was updated \n'
             organizer = ue.get('meta').get('organizer_name')
-            syncerString = formatSyncers(organizer)
+
+            syncerString = ''
+            endDateObject = administrationByFacebookId[ce.get('facebook_id')].get('end_time_object')
+            startDateObject = administrationByFacebookId[ce.get('facebook_id')].get('start_time_object')
+
+            # check if event has passed; if yes then there is no need to notify users with a tag
+            if (endDateObject != None and endDateObject > datetime.now(timezone.utc)) or (endDateObject == None and startDateObject > (datetime.now(timezone.utc) - timedelta(days=1))):
+                syncerString = formatSyncers(organizer)
+
             if organizer != None:
                 text = syncerString + ' An existing event organized by ' + organizer + ' was updated \n'
 
@@ -539,7 +593,15 @@ def postInMattermostSeperate():
             url = config.wp_base_url.replace('wp-json/events_api/v1', 'wp/wp-admin/post.php?post=' + str(de.get('id')) + '&action=edit&lang=nl')
             text = 'An existing event was trashed\n'
             organizer = de.get('meta').get('organizer_name')
-            syncerString = formatSyncers(organizer)
+
+            syncerString = ''
+            endDateObject = administrationByFacebookId[ce.get('facebook_id')].get('end_time_object')
+            startDateObject = administrationByFacebookId[ce.get('facebook_id')].get('start_time_object')
+
+            # check if event has passed; if yes then there is no need to notify users with a tag
+            if (endDateObject != None and endDateObject > datetime.now(timezone.utc)) or (endDateObject == None and startDateObject > (datetime.now(timezone.utc) - timedelta(days=1))):
+                syncerString = formatSyncers(organizer)
+
             if organizer != None:
                 text = syncerString + ' An existing event organized by ' + organizer + ' was trashed \n'
             text = text + ('* ' + de.get('title') + ' | Wordpress: [' + str(de.get('id')) + ' ](' + url + ') | Facebook: [' + str(de.get('facebook_id')) + '](https://www.facebook.com/events/' + str(de.get('facebook_id')) + ')\n')
