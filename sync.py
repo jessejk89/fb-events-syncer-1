@@ -1,5 +1,6 @@
 import requests
 from datetime import datetime, timezone, timedelta
+import time
 import pytz
 from hashlib import blake2b
 import smtplib, ssl
@@ -15,6 +16,12 @@ fb_fields = "id, name, description,  end_time, event_times, place, start_time, c
 
 since_filter = None#"2020-09-30T12:00:00"
 until_filter = None#"2020-09-23T21:00:00"
+
+dryRun = False
+fbToFile = False
+outputFile = None
+fbFromFile = False
+inputFile = None
 
 wpEventsByFacebookId = {}
 fbEventsByFacebookId = {}
@@ -56,6 +63,13 @@ def makeFacebookRequest(url):
         return None
 
     return response
+
+def getFacebookEventsFromFile(inputFile):
+    print("Loading facebook events from file " + inputFile)
+    with open(inputFile, 'r') as eventsFile:
+        data = eventsFile.read()
+
+    return eval(data)
 
 def getEventsFromFacebook():
     url = fb_base_url + '/' + config.fb_page_id + '/events?fields=' + fb_fields + '&access_token=' + config.fb_token
@@ -251,6 +265,9 @@ def getEvent(id):
 
 def postEvent(event):
     url = config.wp_base_url + '/events'
+    if dryRun:
+        print('Executing in dry run mode. Ignoring website request POST ' + url)
+        return "[V] " + time.time()
     print('Executing website request POST ' + url)
     #response = requests.post(url, data = event, cookies = {'Cookie': config.wp_cookie})
     response = requests.post(url, data = event)
@@ -260,6 +277,9 @@ def postEvent(event):
 
 def putEvent(event):
     url = config.wp_base_url + '/events/' + event['id']
+    if dryRun:
+        print('Executing in dry run mode. Ignoring website request POST ' + url)
+        return "[V] " + time.time()
     print('Executing website request PUT ' + url)
     #response = requests.put(url, data = event, cookies = {'Cookie': config.wp_cookie})
     response = requests.put(url, data = event)
@@ -393,7 +413,7 @@ def eventIsUpdated(wpEvent, fbEvent, newEvent, subEvent = None, subEventThumbnai
         #return modified
         return modifiedFields
 
-def compare(fbEvents):
+def compareAndSync(fbEvents):
     for fbEvent in fbEvents:
         wpEvent = wpEventsByFacebookId.get(fbEvent['id'])
         if wpEvent != None:
@@ -531,12 +551,18 @@ def postToMattermostChannel(channelId, message):
     data = {"channel_id": channelId, "message": message}
     headers = {'Authorization': config.mattermostToken}
     response = requests.post(config.mattermostBaseUrl + 'api/v4/posts', headers=headers, json=data)
+    if response != None and response.ok:
+        print("Mattermost post succesful, response:" + str(response))
+    else:
+        print("Error posting to mattermost")
+        print("Mattermost post response:" + str(response))
     return response
 
 def postInMattermost():
     print("Posting message in Mattermost to " + str(config.mattermostChannelId))
     emailBody = createMessageBody()# + '\n```----```\n'
     postToMattermostChannel(config.mattermostChannelId, emailBody)
+
 
 def postInMattermostSeperate():
     print("Posting messages in Mattermost to " + str(config.mattermostChannelId))
@@ -550,6 +576,7 @@ def postInMattermostSeperate():
         generalMessage = 'Event synchronization round complete\n'
         generalMessage += 'Created events: ' + str(len(createdEvents)) + '\n'
         for ce in createdEvents:
+            #TODO: replace correct api version
             url = config.wp_base_url.replace('wp-json/events_api/v1', 'wp/wp-admin/post.php?post=' + str(ce.get('wordpress_id')) + '&action=edit&lang=nl')
             text = 'A new event was created' + '\n'
             organizer = ce.get('organizer_name')
@@ -624,8 +651,17 @@ def formatSyncers(organizer):
                 syncerString += ('@' + s + ' ')
     return syncerString
 
-def init():
+def init(_dryRun, _fbToFile, _outputFile, _fbFromFile, _inputFile):
+    global dryRun, fbToFile, outputFile, fbFromFile, inputFile
     global wpEventsByFacebookId, fbEventsByFacebookId, createdEvents, updatedEvents, deletedEvents
+
+    # Set command line arguments
+    dryRun = _dryRun
+    fbToFile = _fbToFile
+    outputFile = _outputFile
+    fbFromFile = _fbFromFile
+    inputFile = _inputFile
+
     wpEventsByFacebookId = {}
     fbEventsByFacebookId = {}
 
@@ -633,8 +669,8 @@ def init():
     updatedEvents = []
     deletedEvents = []
 
-def synchronize():
-    init()
+def synchronize(dryRun, fbToFile, outputFile, fbFromFile, inputFile):
+    init(dryRun, fbToFile, outputFile, fbFromFile, inputFile)
     print('\n')
     print('[START SYNCHRONISATION] ' + str(datetime.now()))
     # prepare hash table with website events for easy, fast access
@@ -652,10 +688,20 @@ def synchronize():
 
     # print(str(wpEventsByFacebookId))
     # get facebook events
-    events = getEventsFromFacebook()
+
+    if fbFromFile:
+        events = getFacebookEventsFromFile(inputFile)
+        print("EVENTS COUNT " + str(len(events)))
+    else:
+        events = getEventsFromFacebook()
+
     if events == None:
         print('Synchronisation failed, returning')
         return
+
+    if fbToFile:
+        writeEventsToFile(str(events), outputFile)
+        print('Writing ' + str(len(events)) + ' events to file ' + outputFile)
 
     for item in events:
         print('Event found; id: ' + item['id'] + '; name: ' + item['name'] + '; time: ' + item['start_time'])
@@ -669,15 +715,12 @@ def synchronize():
 
      # newEvents = reversed(createNewEvents(dict2))
 
-    # writeEventsToFile(str(newEvents), 'fb_events.txt')
-    # print(str(len(dict2)) + ' events counted')
-
-    compare(events)
-    try:
-        detectCancelledEvents(dict1)
-    except BaseException as e:
-        print('An error occured when detecting cancelled events')
-        print(e)
+    compareAndSync(events)
+    # try:
+    #     detectCancelledEvents(dict1)
+    # except BaseException as e:
+    #     print('An error occured when detecting cancelled events')
+    #     print(e)
 
     print('Importing facebook events done')
     try:
