@@ -52,6 +52,23 @@ For example like this
 
 schedule.every(5).minutes.do(synchronizeWithFile)
 
+
+# Command line
+The script can be started as follows
+>python start.py
+
+Certain behaviour can be manipulated through the use of parameters.
+
+A dry run only performs a retrieval of facebook and wordpress events and compares them, it does not post anything to the wordpress website
+> python start.py --dry-run
+
+Events can be written to a file in json format like this
+>python start.py --fb-to-file events.json
+
+The above ability to write to a file can be very usefull for testing purposes. It can be combined with a dry run. To use a file as input source, the fb-from-file parameter can be used, it then uses the file as input source INSTEAD of facebook.
+>python start.py --fb-from-file events.json
+
+
 ----
 
 FOR STAGING / PRODUCTION
