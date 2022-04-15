@@ -66,7 +66,7 @@ def makeFacebookRequest(url):
 
 def getFacebookEventsFromFile(inputFile):
     print("Loading facebook events from file " + inputFile)
-    with open(inputFile, 'r') as eventsFile:
+    with open(inputFile, 'r', encoding = 'utf-8') as eventsFile:
         data = eventsFile.read()
 
     return eval(data)
