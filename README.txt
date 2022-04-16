@@ -65,7 +65,8 @@ A dry run only performs a retrieval of facebook and wordpress events and compare
 Events can be written to a file in json format like this
 >python start.py --fb-to-file events.json
 
-The above ability to write to a file can be very usefull for testing purposes. It can be combined with a dry run. To use a file as input source, the fb-from-file parameter can be used, it then uses the file as input source INSTEAD of facebook.
+The above ability to write to a file can be very usefull for testing purposes. It can be combined with a dry run.
+To use a file as input source, the fb-from-file parameter can be used, it then uses the file as input source INSTEAD of facebook.
 >python start.py --fb-from-file events.json
 
 
@@ -103,6 +104,8 @@ For information on howto get a Facebook token see https://developers.facebook.co
 For information on howto get a Mattermost token see https://api.mattermost.com/#tag/authentication
 Fill in <resultsEmail> with the email address that needs to receive the synchronization results. The rest of the settings should already be in order.
 The variable <intervalHours> defines how often the script runs, so with 4 it runs every 4 hours.
+
+Make sure that the xrnl website is configured to accept event requests from your ip address, otherwise you will get a 401 Forbidden
 
 Now run
 >docker-compose up -d
